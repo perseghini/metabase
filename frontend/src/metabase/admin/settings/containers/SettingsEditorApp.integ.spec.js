@@ -1,10 +1,6 @@
 import {
+    createTestStore,
     login,
-    startServer,
-    stopServer,
-    globalReduxStore as store,
-    globalBrowserHistory as history,
-    getAppContainer
 } from "metabase/__support__/integrated_tests";
 import { refreshSiteSettings } from "metabase/redux/settings";
 import { initializeSettings } from "metabase/admin/settings/settings";
@@ -38,19 +34,13 @@ function timeout(ms) {
 }
 
 describe("admin/settings", () => {
-    const appContainer = getAppContainer();
-
     beforeAll(async () => {
-        await startServer();
         await login();
-    })
-
-    afterAll(async () => {
-        await stopServer();
     })
 
     describe("admin settings", () => {
         it("should persist a setting", async () => {
+            const store = await createTestStore();
             await store.dispatch(refreshSiteSettings());
             // // do all needed metadata loading before the page push
             await initializeSettings();
@@ -60,10 +50,10 @@ describe("admin/settings", () => {
             const siteName = "Metabase" + Math.random();
 
             // load the "general" pane of the admin settings
-            history.push('/admin/settings/general');
+            store.pushPath('/admin/settings/general');
 
             // first just make sure the site name isn't already set (it shouldn't since we're using a random name)
-            const appWrapper = mount(appContainer)
+            const appWrapper = mount(store.getAppContainer())
             const waitFor = createWaitForElement(appWrapper);
 
             const input = appWrapper.find(".SettingsInput").first()
@@ -79,8 +69,8 @@ describe("admin/settings", () => {
             await waitFor(".SaveStatus.text-success");
 
             // see if the value has actually changed by changing the page and returning to settings page
-            history.push("/");
-            history.push("/admin/settings/general");
+            store.pushPath("/");
+            store.pushPath("/admin/settings/general");
 
             // verify the site name value was persisted
             expect(appWrapper.find(".SettingsInput").first().prop("value")).toBe(siteName);
@@ -89,9 +79,10 @@ describe("admin/settings", () => {
 
     describe("data model editor", () => {
         it("should allow admin to edit data model", async () => {
-            history.push('/admin/datamodel/database');
+            const store = await createTestStore();
+            store.pushPath('/admin/datamodel/database');
             await initializeMetadata();
-            const appWrapper = mount(appContainer)
+            const appWrapper = mount(store.getAppContainer())
 
             const waitFor = createWaitForElement(appWrapper);
             const adminListItems = (await waitFor(".AdminList-item")).children()
@@ -101,16 +92,16 @@ describe("admin/settings", () => {
             const visibilityTypes = (await waitFor("#VisibilityTypes")).children()
             visibilityTypes.at(1).simulate("click");
 
-            const visibilitySubTypes = visibilityTypes.find("#VisibilitySubTypes").children();
-            visibilitySubTypes.at(1).simulate("click");
+            // const visibilitySubTypes = visibilityTypes.find("#VisibilitySubTypes").children();
+            // visibilitySubTypes.at(1).simulate("click");
 
             // hide fields from people table
-            adminListItems.at(2).simulate("click");
+            // adminListItems.at(2).simulate("click");
 
             // Requires still extra work:
 
-            const columnsListItems = appWrapper.find("#ColumnsList").find("li")
-            columnsListItems.at(0).find(".TableEditor-field-visibility").simulate("click");
+            // const columnsListItems = appWrapper.find("#ColumnsList").find("li")
+            // columnsListItems.at(0).find(".TableEditor-field-visibility").simulate("click");
 
             // const columnarSelectorRows = (await waitFor(".ColumnarSelector-rows")).find("li")
             // console.log(columnarSelectorRows.at(1).debug())
