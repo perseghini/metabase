@@ -77,11 +77,20 @@
 
 ;;; ------------------------------------------------------------ Syncing ------------------------------------------------------------
 
+;; TODO - should we make this logic case-insensitive like it is for fields?
+
 (s/defn ^:private ^:always-validate create-or-reactivate-tables!
   "Create NEW-TABLES for database, or if they already exist, mark them as active."
   [database :- DatabaseInstance, new-tables :- #{DatabaseMetadataTable}]
+  (log/info "Found new tables:"
+            (for [table new-tables]
+              (sync-util/name-for-logging (table/map->TableInstance table))))
   (doseq [{schema :schema, table-name :name, :as table} new-tables]
-    (if-let [existing-id (db/select-one-id Table :db_id (u/get-id database), :schema schema, :name table-name, :active false)]
+    (if-let [existing-id (db/select-one-id Table
+                           :db_id  (u/get-id database)
+                           :schema schema
+                           :name   table-name
+                           :active false)]
       ;; if the table already exists but is marked *inactive*, mark it as *active*
       (db/update! Table existing-id
         :active true)
@@ -99,6 +108,9 @@
 (s/defn ^:private ^:always-validate retire-tables!
   "Mark any OLD-TABLES belonging to DATABASE as inactive."
   [database :- DatabaseInstance, old-tables :- #{DatabaseMetadataTable}]
+  (log/info "Marking tables as inactive:"
+            (for [table old-tables]
+              (sync-util/name-for-logging (table/map->TableInstance table))))
   (doseq [{schema :schema, table-name :name, :as table} old-tables]
     (db/update-where! Table {:db_id  (u/get-id database)
                              :schema schema
@@ -128,13 +140,7 @@
         [new-tables old-tables] (data/diff db-metadata our-metadata)]
     ;; create new tables as needed or mark them as active again
     (when (seq new-tables)
-      (log/info "Found new tables:"
-                (for [table new-tables]
-                  (sync-util/name-for-logging (table/map->TableInstance table))))
       (create-or-reactivate-tables! database new-tables))
     ;; mark old tables as inactive
     (when (seq old-tables)
-      (log/info "Marking tables as inactive:"
-                (for [table old-tables]
-                  (sync-util/name-for-logging (table/map->TableInstance table))))
       (retire-tables! database old-tables))))
