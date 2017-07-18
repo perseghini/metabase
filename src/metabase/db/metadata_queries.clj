@@ -1,5 +1,6 @@
 (ns metabase.db.metadata-queries
   "Predefined MBQL queries for getting metadata about an external database."
+  ;; TODO - should this namespace be moved under `metabase.sync`?
   (:require [metabase
              [query-processor :as qp]
              [util :as u]]
