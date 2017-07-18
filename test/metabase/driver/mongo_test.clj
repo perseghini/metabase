@@ -123,7 +123,8 @@
                {:id (data/id :venues :name),       :values (db/select-one-field :values FieldValues, :field_id (data/id :venues :name))}
                {:id (data/id :venues :price),      :values [1 2 3 4]}]}
   (let [venues-table (Table (data/id :venues))]
-    (driver/analyze-table (MongoDriver.) venues-table (set (mapv :id (table/fields venues-table))))))
+    ;; NOCOMMIT
+    #_(driver/analyze-table (MongoDriver.) venues-table (set (mapv :id (table/fields venues-table))))))
 
 ;; ## Big-picture tests for the way data should look post-sync
 

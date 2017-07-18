@@ -2,13 +2,20 @@
   "Utility functions and macros to abstract away some common patterns and operations across the sync processes, such as logging start/end messages."
   (:require [clojure.tools.logging :as log]
             [metabase
+             [driver :as driver]
              [events :as events]
              [util :as u]]
-            [metabase.models.table :refer [Table]]
+            [metabase.models
+             database
+             field
+             [table :refer [Table]]]
             [metabase.query-processor.interface :as i]
             [toucan.db :as db]
             [clojure.math.numeric-tower :as math]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import metabase.models.database.DatabaseInstance
+           metabase.models.field.FieldInstance
+           metabase.models.table.TableInstance))
 
 (defn do-with-start-and-finish-logging
   "Implementation of `with-start-and-finish-logging`. Don't use this directly, prefer that instead."
@@ -29,20 +36,20 @@
 (defn do-with-sync-events
   "Impl for `with-sync-events`. Don't use this directly; use that instead."
   ;; we can do everyone a favor and infer the name of the individual begin and sync events
-  ([event-name-prefix database-id f]
+  ([event-name-prefix database-or-id f]
    (do-with-sync-events
     (keyword (str (name event-name-prefix) "-begin"))
     (keyword (str (name event-name-prefix) "-end"))
-    database-id
+    database-or-id
     f))
-  ([begin-event-name end-event-name database-id f]
+  ([begin-event-name end-event-name database-or-id f]
    (let [start-time    (System/nanoTime)
          tracking-hash (str (java.util.UUID/randomUUID))]
-     (events/publish-event! begin-event-name {:database_id database-id, :custom_id tracking-hash})
+     (events/publish-event! begin-event-name {:database_id (u/get-id database-or-id), :custom_id tracking-hash})
      (f)
      (let [total-time-ms (int (/ (- (System/nanoTime) start-time)
                                  1000000.0))]
-       (events/publish-event! end-event-name {:database_id  database-id
+       (events/publish-event! end-event-name {:database_id  (u/get-id database-or-id)
                                               :custom_id    tracking-hash
                                               :running_time total-time-ms})))))
 
@@ -50,8 +57,8 @@
   "Publish events related to beginning and ending a sync-like process, e.g. `:sync-database` or `:cache-values`, for a DATABASE-ID.
    BODY is executed between the logging of the two events."
   {:style/indent 2}
-  [event-name-prefix database-id & body]
-  `(do-with-sync-events ~event-name-prefix ~database-id (fn [] ~@body)))
+  [event-name-prefix database-or-id & body]
+  `(do-with-sync-events ~event-name-prefix ~database-or-id (fn [] ~@body)))
 
 
 (defmacro with-db-logging-disabled
@@ -69,17 +76,17 @@
 
 (defn do-with-duplicate-ops-prevented
   "Implementation for `with-duplicate-ops-prevented`; prefer that instead."
-  [operation database-id f]
+  [operation database-or-id f]
   (println "Current operations:" @operation->db-ids) ; NOCOMMIT
-  (when-not (contains? (@operation->db-ids operation) database-id)
+  (when-not (contains? (@operation->db-ids operation) (u/get-id database-or-id))
     (try
       ;; mark this database as currently syncing so we can prevent duplicate sync attempts (#2337)
-      (swap! operation->db-ids update operation #(conj (or % #{}) database-id))
+      (swap! operation->db-ids update operation #(conj (or % #{}) (u/get-id database-or-id)))
       ;; do our work
       (f)
       ;; always cleanup our tracking when we are through
       (finally
-        (swap! operation->db-ids update operation #(disj % database-id))))))
+        (swap! operation->db-ids update operation #(disj % (u/get-id database-or-id)))))))
 
 (defmacro with-duplicate-ops-prevented
   "Run BODY in a way that will prevent it from simultaneously being ran more for a single database more than once for a given OPERATION.
@@ -88,8 +95,21 @@
      (with-duplicate-ops-prevented :sync database-id
        (sync-db! database-id))"
   {:style/indent 2}
-  [operation database-id & body]
-  `(do-with-duplicate-ops-prevented ~operation ~database-id (fn [] ~@body)))
+  [operation database-or-id & body]
+  `(do-with-duplicate-ops-prevented ~operation ~database-or-id (fn [] ~@body)))
+
+(defmacro sync-in-context {:style/indent 1} [database & body]
+  `(driver/sync-in-context (driver/->driver ~database) ~database
+     (fn [] ~@body)))
+
+;; TODO - simplify this macro and the other ones that it uses!
+(defmacro sync-operation {:style/indent 3} [operation database message & body]
+  `(with-duplicate-ops-prevented ~operation ~database
+     (with-sync-events ~operation ~database
+       (with-start-and-finish-logging ~message
+         (with-db-logging-disabled
+           (sync-in-context ~database
+             ~@body))))))
 
 
 (def ^:private ^:const ^Integer emoji-meter-width 50)
@@ -144,3 +164,20 @@
   "Return all the Tables that should go the sync processes for DATABASE-OR-ID."
   [database-or-id]
   (db/select Table, :db_id (u/get-id database-or-id), :active true, :visibility_type nil))
+
+
+(defprotocol INameForLogging
+  (name-for-logging [this]))
+
+(extend-protocol INameForLogging
+  DatabaseInstance
+  (name-for-logging [{database-name :name, engine :engine}]
+    (format "%s Database '%s'" (name engine) database-name))
+
+  TableInstance
+  (name-for-logging [{schema :schema, table-name :name}]
+    (format "Table '%s'" (str (when schema (str schema ".")) table-name)))
+
+  FieldInstance
+  (name-for-logging [{field-name :name}]
+    (format "Field '%s'" field-name)))

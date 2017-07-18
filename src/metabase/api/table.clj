@@ -4,7 +4,7 @@
             [compojure.core :refer [GET PUT]]
             [medley.core :as m]
             [metabase
-             [sync-database :as sync-database]
+             [sync :as sync]
              [util :as u]]
             [metabase.api.common :as api]
             [metabase.models
@@ -68,15 +68,15 @@
                      :entity_type             entity_type
                      :description             description))
     (api/check-500 (db/update! Table id, :visibility_type visibility_type))
-    (let [updated-table (Table id)
-          new-visibility (visible-state? (:visibility_type updated-table))
-          old-visibility (visible-state? original-visibility-type)
-          visibility-changed? (and (not= new-visibility
+    (let [updated-table      (Table id)
+          new-visibility     (visible-state? (:visibility_type updated-table))
+          old-visibility     (visible-state? original-visibility-type)
+          table-now-visible? (and (not= new-visibility
                                          old-visibility)
                                    (= :show new-visibility))]
-      (when visibility-changed?
-        (log/debug (u/format-color 'green "Table visibility changed, resyncing %s -> %s : %s") original-visibility-type visibility_type visibility-changed?)
-        (sync-database/sync-table! updated-table))
+      (when table-now-visible?
+        (log/debug (u/format-color 'green "Table is now visible. Resyncing."))
+        (sync/sync-table! updated-table))
       updated-table)))
 
 

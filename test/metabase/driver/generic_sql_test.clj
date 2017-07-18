@@ -77,7 +77,8 @@
                {:id (id :venues :longitude)}
                {:id (id :venues :name), :values (db/select-one-field :values 'FieldValues, :field_id (id :venues :name))}
                {:id (id :venues :price), :values [1 2 3 4]}]}
-  (driver/analyze-table (H2Driver.) @venues-table (set (mapv :id (table/fields @venues-table)))))
+  ;; NOCOMMIT
+  #_(driver/analyze-table (H2Driver.) @venues-table (set (mapv :id (table/fields @venues-table)))))
 
 (resolve-private-vars metabase.driver.generic-sql field-avg-length field-values-lazy-seq table-rows-seq)
 
@@ -121,8 +122,9 @@
     ;; Oracle considers empty strings to be NULL strings; thus in this particular test `percent-valid-urls` gives us 4/7 valid valid where other DBs give us 4/8
     0.5714285714285714
     0.5)
+  ;; NOCOMMIT
   (dataset half-valid-urls
-    (field-percent-urls datasets/*driver* (db/select-one 'Field :id (id :urls :url)))))
+    #_(field-percent-urls datasets/*driver* (db/select-one 'Field :id (id :urls :url)))))
 
 ;;; Make sure invalid ssh credentials are detected if a direct connection is possible
 (expect

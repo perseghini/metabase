@@ -12,6 +12,7 @@
 
 ;;; ------------------------------------------------------------ Relevant Schemas ------------------------------------------------------------
 
+;; TODO - update these docstrings
 (def DatabaseMetadataTable
   "Schema for the expected output of `describe-database` for a Table."
   {:name   s/Str

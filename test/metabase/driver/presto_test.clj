@@ -106,7 +106,8 @@
                {:id (data/id :venues :name), :values (db/select-one-field :values 'FieldValues, :field_id (data/id :venues :name))}
                {:id (data/id :venues :price), :values [1 2 3 4]}]}
   (let [venues-table (db/select-one 'Table :id (data/id :venues))]
-    (driver/analyze-table (PrestoDriver.) venues-table (set (mapv :id (table/fields venues-table))))))
+    ;; NOCOMMIT
+    #_(driver/analyze-table (PrestoDriver.) venues-table (set (mapv :id (table/fields venues-table))))))
 
 ;;; FIELD-VALUES-LAZY-SEQ
 (datasets/expect-with-engine :presto
@@ -135,8 +136,9 @@
 ;;; FIELD-PERCENT-URLS
 (datasets/expect-with-engine :presto
   0.5
+  ;; NOCOMMIT
   (data/dataset half-valid-urls
-    (sql/field-percent-urls (PrestoDriver.) (db/select-one 'Field :id (data/id :urls :url)))))
+    #_(sql/field-percent-urls (PrestoDriver.) (db/select-one 'Field :id (data/id :urls :url)))))
 
 ;;; APPLY-PAGE
 (expect
