@@ -3,17 +3,22 @@
   (:require [clojure.string :as str]
             [metabase.models
              [humanization :as humanization]
-             [table :refer [Table]]]
-            [metabase.sync.fetch-metadata :as fetch-metadata]
+             [table :as table :refer [Table]]]
+            [metabase.sync.fetch-metadata :as fetch-metadata :refer [DatabaseMetadata DatabaseMetadataTable]]
+            [metabase.sync.sync-metadata.metabase-metadata :as metabase-metadata]
             [schema.core :as s]
-            [toucan.db :as db])
+            [toucan.db :as db]
+            [metabase.util :as u]
+            [clojure.data :as data]
+            [clojure.tools.logging :as log]
+            [metabase.sync.util :as sync-util])
   (:import metabase.models.database.DatabaseInstance))
 
 ;;; ------------------------------------------------------------  "Crufty" Tables ------------------------------------------------------------
 
 ;; Crufty tables are ones we know are from frameworks like Rails or Django and thus automatically mark as `:cruft`
 
-(def ^:private ^:const crufty-table-patterns
+(def ^:private crufty-table-patterns
   "Regular expressions that match Tables that should automatically given the `visibility-type` of `:cruft`.
    This means they are automatically hidden to users (but can be unhidden in the admin panel).
    These `Tables` are known to not contain useful data, such as migration or web framework internal tables."
@@ -64,45 +69,72 @@
     ;; Lobos
     #"^lobos_migrations$"})
 
-(defn- is-crufty-table?
+(s/defn ^:private ^:always-validate is-crufty-table? :- s/Bool
   "Should we give newly created TABLE a `visibility_type` of `:cruft`?"
-  [table]
+  [table :- DatabaseMetadataTable]
   (boolean (some #(re-find % (str/lower-case (:name table))) crufty-table-patterns)))
 
 
 ;;; ------------------------------------------------------------ Syncing ------------------------------------------------------------
 
-(defn ^:deprecated update-table-from-tabledef!
-  "Update `Table` with the data from TABLE-DEF."
-  [{:keys [id display_name], :as existing-table} {table-name :name}]
-  {:pre [(integer? id)]}
-  (let [updated-table (assoc existing-table
-                        :display_name (or display_name (humanization/name->human-readable-name table-name)))]
-    ;; the only thing we need to update on a table is the :display_name, if it never got set
-    (when (nil? display_name)
-      (db/update! Table id
-        :display_name (:display_name updated-table)))
-    ;; always return the table when we are done
-    updated-table))
+(s/defn ^:private ^:always-validate create-or-reactivate-tables!
+  "Create NEW-TABLES for database, or if they already exist, mark them as active."
+  [database :- DatabaseInstance, new-tables :- #{DatabaseMetadataTable}]
+  (doseq [{schema :schema, table-name :name, :as table} new-tables]
+    (if-let [existing-id (db/select-one-id Table :db_id (u/get-id database), :schema schema, :name table-name, :active false)]
+      ;; if the table already exists but is marked *inactive*, mark it as *active*
+      (db/update! Table existing-id
+        :active true)
+      ;; otherwise create a new Table
+      (db/insert! Table
+        :db_id           (u/get-id database)
+        :schema          schema
+        :name            table-name
+        :display_name    (humanization/name->human-readable-name table-name)
+        :active          true
+        :visibility_type (when (is-crufty-table? table)
+                           :cruft)))))
 
-(defn ^:deprecated create-table-from-tabledef!
-  "Create `Table` with the data from TABLE-DEF."
-  [database-id {schema-name :schema, table-name :name, raw-table-id :raw-table-id, visibility-type :visibility-type}]
-  (if-let [existing-id (db/select-one-id Table :db_id database-id, :raw_table_id raw-table-id, :schema schema-name, :name table-name, :active false)]
-    ;; if the table already exists but is marked *inactive*, mark it as *active*
-    (db/update! Table existing-id
-      :active true)
-    ;; otherwise create a new Table
-    (db/insert! Table
-      :db_id           database-id
-      :raw_table_id    raw-table-id
-      :schema          schema-name
-      :name            table-name
-      :visibility_type visibility-type
-      :display_name    (humanization/name->human-readable-name table-name)
-      :active          true)))
+
+(s/defn ^:private ^:always-validate retire-tables!
+  "Mark any OLD-TABLES belonging to DATABASE as inactive."
+  [database :- DatabaseInstance, old-tables :- #{DatabaseMetadataTable}]
+  (doseq [{schema :schema, table-name :name, :as table} old-tables]
+    (db/update-where! Table {:db_id  (u/get-id database)
+                             :schema schema
+                             :active true}
+      :active false)))
+
+
+(s/defn ^:private ^:always-validate db-metadata :- #{DatabaseMetadataTable}
+  [database :- DatabaseInstance]
+  (set (for [table (:tables (fetch-metadata/db-metadata database))
+             :when (not (metabase-metadata/is-metabase-metadata-table? table))]
+         table)))
+
+(s/defn ^:private ^:always-validate our-metadata :- #{DatabaseMetadataTable}
+  "Return information about what Tables we have for this DB in the Metabase application DB."
+  [database :- DatabaseInstance]
+  (set (map (partial into {})
+            (db/select [Table :name :schema]
+              :db_id  (u/get-id database)
+              :active true))))
 
 (s/defn ^:always-validate sync-tables!
   [database :- DatabaseInstance]
-  (let [metadata (fetch-metadata/db-metadata database)]
-    (throw (NoSuchMethodException.))))
+  ;; determine what's changed between what info we have and what's in the DB
+  (let [db-metadata             (db-metadata database)
+        our-metadata            (our-metadata database)
+        [new-tables old-tables] (data/diff db-metadata our-metadata)]
+    ;; create new tables as needed or mark them as active again
+    (when (seq new-tables)
+      (log/info "Found new tables:"
+                (for [table new-tables]
+                  (sync-util/name-for-logging (table/map->TableInstance table))))
+      (create-or-reactivate-tables! database new-tables))
+    ;; mark old tables as inactive
+    (when (seq old-tables)
+      (log/info "Marking tables as inactive:"
+                (for [table old-tables]
+                  (sync-util/name-for-logging (table/map->TableInstance table))))
+      (retire-tables! database old-tables))))

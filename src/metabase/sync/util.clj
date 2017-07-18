@@ -176,7 +176,7 @@
 
   TableInstance
   (name-for-logging [{schema :schema, table-name :name}]
-    (format "Table '%s'" (str (when schema (str schema ".")) table-name)))
+    (format "Table '%s'" (str (when (seq schema) (str schema ".")) table-name)))
 
   FieldInstance
   (name-for-logging [{field-name :name}]

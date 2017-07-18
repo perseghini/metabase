@@ -6,17 +6,15 @@
              database
              table]
             [metabase.util.schema :as su]
-            [schema.core :as s])
+            [schema.core :as s]
+            [metabase.driver :as driver])
   (:import metabase.models.database.DatabaseInstance
            metabase.models.table.TableInstance))
 
-;;; ------------------------------------------------------------ Relevant Schemas ------------------------------------------------------------
-
-;; TODO - update these docstrings
 (def DatabaseMetadataTable
   "Schema for the expected output of `describe-database` for a Table."
-  {:name   s/Str
-   :schema (s/maybe s/Str)})
+  {:name   su/NonBlankString
+   :schema (s/maybe su/NonBlankString)})
 
 (def DatabaseMetadata
   "Schema for the expected output of `describe-database`."
@@ -24,7 +22,7 @@
 
 
 (def TableMetadataField
-  "Schema for a given Field as provided in `describe-table` or `analyze-table`."
+  "Schema for a given Field as provided in `describe-table`."
   {:name                           su/NonBlankString
    :base-type                      su/FieldType
    (s/optional-key :special-type)  su/FieldType
@@ -38,6 +36,7 @@
    :schema (s/maybe su/NonBlankString)
    :fields #{TableMetadataField}})
 
+
 (def FKMetadata
   "Schema for the expected output of `describe-table-fks`."
   (s/maybe #{{:fk-column-name   su/NonBlankString
@@ -45,17 +44,18 @@
                                  :schema (s/maybe su/NonBlankString)}
               :dest-column-name su/NonBlankString}}))
 
-;;; ------------------------------------------------------------ Metadata Fns ------------------------------------------------------------
 
 (s/defn ^:always-validate db-metadata :- DatabaseMetadata
   "Get basic Metadata about a Database and its Tables. Doesn't include information about the fields."
   [database :- DatabaseInstance]
-  (throw (NoSuchMethodException.)))
+  (driver/describe-database (driver/->driver database) database))
 
 (s/defn ^:always-validate table-metadata :- TableMetadata
   [database :- DatabaseInstance, table :- TableInstance]
-  (throw (NoSuchMethodException.)))
+  (driver/describe-table (driver/->driver database) database table))
 
 (s/defn ^:always-validate fk-metadata :- FKMetadata
   [database :- DatabaseInstance, table :- TableInstance]
-  (throw (NoSuchMethodException.)))
+  (let [driver (driver/->driver database)]
+    (when (driver/driver-supports? :foreign-keys)
+      (driver/describe-table-fks driver database table))))

@@ -56,9 +56,9 @@
                (log/error (u/format-color 'red "Error in _metabase_metadata: %s" (.getMessage e)))))))))
 
 
-(defn is-metabase-metadata-table?
+(s/defn ^:always-validate is-metabase-metadata-table? :- s/Bool
   "Is this TABLE the special `_metabase_metadata` table?"
-  [table]
+  [table :- DatabaseMetadataTable]
   (= "_metabase_metadata" (str/lower-case (:name table))))
 
 (defn- maybe-sync-metabase-metadata-table!

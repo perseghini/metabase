@@ -64,16 +64,16 @@
   (describe-database ^java.util.Map [this, ^DatabaseInstance database]
     "Return a map containing information that describes all of the schema settings in DATABASE, most notably a set of tables.
      It is expected that this function will be peformant and avoid draining meaningful resources of the database.
-     Results should match the `DescribeDatabase` schema.")
+     Results should match the `DatabaseMetadata` schema.")
 
-  (describe-table ^java.util.Map [this, ^DatabaseInstance database, ^java.util.Map table]
+  (describe-table ^java.util.Map [this, ^DatabaseInstance database, ^TableInstance table]
     "Return a map containing information that describes the physical schema of TABLE.
      It is expected that this function will be peformant and avoid draining meaningful resources of the database.
-     Results should match the `DescribeTable` schema.")
+     Results should match the `TableMetadata` schema.")
 
-  (describe-table-fks ^java.util.Set [this, ^DatabaseInstance database, ^java.util.Map table]
+  (describe-table-fks ^java.util.Set [this, ^DatabaseInstance database, ^TableInstance table]
     "*OPTIONAL*, BUT REQUIRED FOR DRIVERS THAT SUPPORT `:foreign-keys`*
-     Results should match the `DescribeTableFKs` schema.")
+     Results should match the `FKMetadata` schema.")
 
   (details-fields ^clojure.lang.Sequential [this]
     "A vector of maps that contain information about connection properties that should
