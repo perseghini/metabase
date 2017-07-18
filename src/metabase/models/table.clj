@@ -155,7 +155,7 @@
 
 ;;; ------------------------------------------------------------ Persistence Functions ------------------------------------------------------------
 
-(defn retire-tables!
+(defn ^:deprecated retire-tables!
   "Retire all `Tables` in the list of TABLE-IDs along with all of each tables `Fields`."
   [table-ids]
   {:pre [(u/maybe? set? table-ids) (every? integer? table-ids)]}
@@ -167,7 +167,7 @@
     (db/update-where! Field {:table_id [:in table-ids]}
       :visibility_type "retired")))
 
-(defn update-table-from-tabledef!
+(defn ^:deprecated update-table-from-tabledef!
   "Update `Table` with the data from TABLE-DEF."
   [{:keys [id display_name], :as existing-table} {table-name :name}]
   {:pre [(integer? id)]}
@@ -180,7 +180,7 @@
     ;; always return the table when we are done
     updated-table))
 
-(defn create-table-from-tabledef!
+(defn ^:deprecated create-table-from-tabledef!
   "Create `Table` with the data from TABLE-DEF."
   [database-id {schema-name :schema, table-name :name, raw-table-id :raw-table-id, visibility-type :visibility-type}]
   (if-let [existing-id (db/select-one-id Table :db_id database-id, :raw_table_id raw-table-id, :schema schema-name, :name table-name, :active false)]

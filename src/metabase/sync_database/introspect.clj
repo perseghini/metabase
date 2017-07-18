@@ -10,11 +10,12 @@
              [raw-table :refer [RawTable]]]
             [metabase.sync-database.interface :as i]
             [schema.core :as schema]
-            [toucan.db :as db]))
+            [toucan.db :as db]
+            [metabase.sync.util :as sync-util]))
 
-(defn- named-table
+(defn- table-name-for-logging
   ([table]
-    (named-table (:schema table) (:name table)))
+    (table-name-for-logging (:schema table) (:name table)))
   ([table-schema table-name]
    (str (when table-schema (str table-schema ".")) table-name)))
 
@@ -33,7 +34,7 @@
       (when-let [source-column-id (db/select-one-id RawColumn, :raw_table_id table-id, :name fk-column-name)]
         (when-let [dest-table-id (db/select-one-id RawTable, :database_id database-id, :schema (:schema dest-table), :name (:name dest-table))]
           (when-let [dest-column-id (db/select-one-id RawColumn, :raw_table_id dest-table-id, :name dest-column-name)]
-            (log/debug (u/format-color 'cyan "Marking foreign key '%s.%s' -> '%s.%s'." (named-table table) fk-column-name (named-table dest-table) dest-column-name))
+            (log/debug (u/format-color 'cyan "Marking foreign key '%s.%s' -> '%s.%s'." (table-name-for-logging table) fk-column-name (table-name-for-logging dest-table) dest-column-name))
             (db/update! RawColumn source-column-id
               :fk_target_column_id dest-column-id)))))))
 
@@ -72,11 +73,11 @@
               :details      details
               :active       true)))))))
 
-(defn- create-raw-table!
+(defn- ^:deprecated create-raw-table!
   "Create a new `RawTable`, includes saving all specified `:columns`."
   [database-id {table-name :name, table-schema :schema, :keys [details fields]}]
   {:pre [(integer? database-id) (string? table-name)]}
-  (log/debug (u/format-color 'cyan "Found new table: %s" (named-table table-schema table-name)))
+  (log/debug (u/format-color 'cyan "Found new table: %s" (table-name-for-logging table-schema table-name)))
   (let [table (db/insert! RawTable
                 :database_id  database-id
                 :schema       table-schema
@@ -85,7 +86,7 @@
                 :active       true)]
     (save-all-table-columns! table fields)))
 
-(defn- update-raw-table!
+(defn- ^:deprecated update-raw-table!
   "Update an existing `RawTable`, includes saving all specified `:columns`."
   [{table-id :id, :as table} {:keys [details fields]}]
   ;; NOTE: the schema+name of a table makes up the natural key and cannot be modified on update
@@ -96,7 +97,7 @@
   ;; save columns
   (save-all-table-columns! table fields))
 
-(defn- disable-raw-tables!
+(defn- ^:deprecated disable-raw-tables!
   "Disable a list of `RawTable` ids, including all `RawColumns` associated with those tables."
   [table-ids]
   {:pre [(coll? table-ids) (every? integer? table-ids)]}
@@ -111,7 +112,7 @@
        :fk_target_column_id nil))))
 
 
-(defn introspect-raw-table-and-update!
+(defn ^:deprecated introspect-raw-table-and-update!
   "Introspect a single `RawTable` and persist the results as `RawTables` and `RawColumns`.
    Uses the various `describe-*` functions on the IDriver protocol to gather information."
   [driver database raw-table]
@@ -142,8 +143,7 @@
 (defn- introspect-tables!
   "Introspect each table and save off the schema details we find."
   [driver database tables existing-tables]
-  (let [tables-count          (count tables)
-        finished-tables-count (atom 0)]
+  (sync-util/with-emoji-progress-bar [emoji-progress-bar (count tables)]
     (doseq [{table-schema :schema, table-name :name, :as table-def} tables]
       (try
         (let [table-def (if (contains? (driver/features driver) :dynamic-schema)
@@ -156,17 +156,16 @@
             (update-raw-table! raw-table table-def)
             (create-raw-table! (:id database) table-def)))
         (catch Throwable t
-          (log/error (u/format-color 'red "Unexpected error introspecting table schema: %s" (named-table table-schema table-name)) t))
+          (log/error (u/format-color 'red "Unexpected error introspecting table schema: %s" (table-name-for-logging table-schema table-name)) t))
         (finally
-          (swap! finished-tables-count inc)
-          (log/info (u/format-color 'magenta "%s Synced table '%s'." (u/emoji-progress-bar @finished-tables-count tables-count) (named-table table-schema table-name))))))))
+          (log/info (u/format-color 'magenta "%s Synced table '%s'." (emoji-progress-bar) (table-name-for-logging table-schema table-name))))))))
 
 (defn- disable-old-tables!
   "Any tables/columns that previously existed but aren't included any more get disabled."
   [tables existing-tables]
   (when-let [tables-to-disable (not-empty (set/difference (set (keys existing-tables))
                                                           (set (mapv #(select-keys % [:schema :name]) tables))))]
-    (log/info (u/format-color 'cyan "Disabled tables: %s" (mapv #(named-table (:schema %) (:name %)) tables-to-disable)))
+    (log/info (u/format-color 'cyan "Disabled tables: %s" (mapv #(table-name-for-logging (:schema %) (:name %)) tables-to-disable)))
     (disable-raw-tables! (for [table-to-disable tables-to-disable]
                            (:id (get existing-tables table-to-disable))))))
 
@@ -182,7 +181,7 @@
           (when-let [raw-table (RawTable :database_id (:id database), :schema table-schema, :name table-name)]
             (save-all-table-fks! raw-table table-fks)))
         (catch Throwable t
-          (log/error (u/format-color 'red "Unexpected error introspecting table fks: %s" (named-table table-schema table-name)) t))))))
+          (log/error (u/format-color 'red "Unexpected error introspecting table fks: %s" (table-name-for-logging table-schema table-name)) t))))))
 
 (defn- db->tables [driver database]
   (let [{:keys [tables]} (u/prog1 (driver/describe-database driver database)
@@ -195,17 +194,13 @@
              {{:name name, :schema schema} table})))
 
 
-(defn introspect-database-and-update-raw-tables!
+(defn ^:deprecated introspect-database-and-update-raw-tables!
   "Introspect a `Database` and persist the results as `RawTables` and `RawColumns`.
    Uses the various `describe-*` functions on the IDriver protocol to gather information."
   [driver database]
-  (log/info (u/format-color 'magenta "Introspecting schema on %s database '%s' ..." (name driver) (:name database)))
-  (let [start-time-ns      (System/nanoTime)
-        tables             (db->tables driver database)
-        name+schema->table (db->name+schema->table database)]
-
-    (introspect-tables! driver database tables name+schema->table)
-    (disable-old-tables! tables name+schema->table)
-    (sync-fks! driver database tables)
-
-    (log/info (u/format-color 'magenta "Introspection completed on %s database '%s' (%s)" (name driver) (:name database) (u/format-nanoseconds (- (System/nanoTime) start-time-ns))))))
+  (sync-util/with-start-and-finish-logging (format "Introspect schema on %s database '%s'" (name driver) (:name database))
+    (let [tables             (db->tables driver database)
+          name+schema->table (db->name+schema->table database)]
+      (introspect-tables! driver database tables name+schema->table)
+      (disable-old-tables! tables name+schema->table)
+      (sync-fks! driver database tables))))
