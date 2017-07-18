@@ -2,9 +2,8 @@
   (:require [expectations :refer :all]
             [metabase.models
              [database :refer [Database]]
-             [raw-column :refer [RawColumn]]
-             [raw-table :refer [RawTable]]]
-            [metabase.sync-database.introspect :as introspect]
+             [field :refer [Field]]
+             [table :refer [Table]]]
             [metabase.test.mock.moviedb :as moviedb]
             [metabase.test.util :as tu]
             [toucan
@@ -12,20 +11,23 @@
              [hydrate :refer [hydrate]]]
             [toucan.util.test :as tt]))
 
-(tu/resolve-private-vars metabase.sync-database.introspect
-  save-all-table-columns! save-all-table-fks! create-raw-table! update-raw-table! disable-raw-tables!)
+(defn- save-all-table-columns! [& _] (throw (UnsupportedOperationException.)))
+(defn- save-all-table-fks!     [& _] (throw (UnsupportedOperationException.)))
+(defn- create-raw-table!       [& _] (throw (UnsupportedOperationException.)))
+(defn- update-raw-table!       [& _] (throw (UnsupportedOperationException.)))
+(defn- disable-raw-tables!     [& _] (throw (UnsupportedOperationException.)))
 
 (defn get-tables [database-id]
-  (->> (hydrate (db/select RawTable, :database_id database-id, {:order-by [:id]}) :columns)
+  (->> (hydrate (db/select Table, :db_id database-id, {:order-by [:id]}) :fields)
        (mapv tu/boolean-ids-and-timestamps)))
 
 (defn get-table [table-id]
-  (->> (hydrate (RawTable :raw_table_id table-id) :columns)
+  (->> (hydrate (Table table-id) :fields)
        (mapv tu/boolean-ids-and-timestamps)))
 
 (def ^:private ^:const field-defaults
   {:id                  true
-   :raw_table_id        true
+   ;; :table_id            true
    :active              true
    :column_type         nil
    :is_pk               false
@@ -45,16 +47,16 @@
     (merge field-defaults {:name "user_id"})]
    [(merge field-defaults {:name "id"})
     (merge field-defaults {:name "user_id", :fk_target_column_id true})]]
-  (tt/with-temp* [Database  [{database-id :id}]
-                  RawTable  [{raw-table-id1 :id, :as table}  {:database_id database-id, :schema "customer1", :name "photos"}]
-                  RawColumn [_                               {:raw_table_id raw-table-id1, :name "id"}]
-                  RawColumn [_                               {:raw_table_id raw-table-id1, :name "user_id"}]
-                  RawTable  [{raw-table-id2 :id, :as table1} {:database_id database-id, :schema "customer2", :name "photos"}]
-                  RawColumn [_                               {:raw_table_id raw-table-id2, :name "id"}]
-                  RawColumn [_                               {:raw_table_id raw-table-id2, :name "user_id"}]
-                  RawTable  [{raw-table-id3 :id, :as table2} {:database_id database-id, :schema nil, :name "users"}]
-                  RawColumn [_                               {:raw_table_id raw-table-id3, :name "id"}]]
-    (let [get-columns #(->> (db/select RawColumn, :raw_table_id raw-table-id1, {:order-by [:id]})
+  (tt/with-temp* [Database [{database-id :id}]
+                  Table    [{table-id-1 :id, :as table}  {:database_id database-id, :schema "customer1", :name "photos"}]
+                  Field    [_                            {:table_id table-id-1,     :name "id"}]
+                  Field    [_                            {:table_id table-id-1,     :name "user_id"}]
+                  Table    [{table-id-2 :id, :as table1} {:database_id database-id, :schema "customer2", :name "photos"}]
+                  Field    [_                            {:table_id table-id-2,     :name "id"}]
+                  Field    [_                            {:table_id table-id-2,     :name "user_id"}]
+                  Table    [{table-id-3 :id, :as table2} {:database_id database-id, :schema nil, :name "users"}]
+                  Field    [_                            {:table_id table-id-3,     :name "id"}]]
+    (let [get-columns #(->> (db/select Field, :table_id table-id-1, {:order-by [:id]})
                             (mapv tu/boolean-ids-and-timestamps))]
       ;; original list should not have any fks
       [(get-columns)
@@ -102,8 +104,8 @@
            {:name    "num_feathers"
             :details {:count 12000, :base-type "type/Integer"}})]]
   (tt/with-temp* [Database [{database-id :id}]
-                  RawTable [{raw-table-id :id, :as table} {:database_id database-id}]]
-    (let [get-columns #(->> (db/select RawColumn, :raw_table_id raw-table-id, {:order-by [:id]})
+                  Table [{table-id- :id, :as table} {:database_id database-id}]]
+    (let [get-columns #(->> (db/select Field, :table_id table-id-, {:order-by [:id]})
                             (mapv tu/boolean-ids-and-timestamps))]
       ;; original list should be empty
       [(get-columns)
@@ -191,7 +193,7 @@
                               :is_pk   true
                               :details {:inches 7, :base-type "type/Integer"}})]})]]
   (tt/with-temp* [Database [{database-id :id, :as db}]
-                  RawTable [table {:database_id database-id
+                  Table [table {:database_id database-id
                                    :schema      "aviary"
                                    :name        "toucanery"
                                    :details     {:owner "Cam"}}]]
@@ -229,10 +231,10 @@
             :columns [(merge field-defaults {:active false, :name "beak_size"})]
             :active  false})]]
   (tt/with-temp* [Database  [{database-id :id, :as db}]
-                  RawTable  [t1 {:database_id database-id, :schema "a", :name "1"}]
-                  RawColumn [c1 {:raw_table_id (:id t1), :name "size"}]
-                  RawTable  [t2 {:database_id database-id, :schema "a", :name "2"}]
-                  RawColumn [c2 {:raw_table_id (:id t2), :name "beak_size", :fk_target_column_id (:id c1)}]]
+                  Table  [t1 {:database_id database-id, :schema "a", :name "1"}]
+                  Field [c1 {:table_id (:id t1), :name "size"}]
+                  Table  [t2 {:database_id database-id, :schema "a", :name "2"}]
+                  Field [c2 {:table_id (:id t2), :name "beak_size", :fk_target_column_id (:id c1)}]]
     [(get-tables database-id)
      (do
        (disable-raw-tables! [(:id t1) (:id t2)])
@@ -256,13 +258,13 @@
     [(get-tables database-id)
      ;; first sync should add all the tables, fields, etc
      (do
-       (introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
+       #_(introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
        (get-tables database-id))
      ;; run the sync a second time to see how we respond to repeat syncing
      (do
-       (introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
+       #_(introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
        (get-tables database-id))
      ;; one more time, but this time we'll remove a table and make sure that's handled properly
      (do
-       (introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) (assoc db :exclude-tables #{"roles"}))
+       #_(introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) (assoc db :exclude-tables #{"roles"}))
        (get-tables database-id))]))

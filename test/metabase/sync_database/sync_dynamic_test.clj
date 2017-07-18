@@ -3,11 +3,7 @@
             [metabase.models
              [database :refer [Database]]
              [field :refer [Field]]
-             [raw-table :refer [RawTable]]
              [table :refer [Table]]]
-            [metabase.sync-database
-             [introspect :as introspect]
-             [sync-dynamic :refer :all]]
             [metabase.test.mock.toucanery :as toucanery]
             [metabase.test.util :as tu]
             [toucan
@@ -15,8 +11,8 @@
              [hydrate :refer [hydrate]]]
             [toucan.util.test :as tt]))
 
-(tu/resolve-private-vars metabase.sync-database.sync-dynamic
-  save-table-fields!)
+(defn- save-table-fields! [& _]
+  (throw (UnsupportedOperationException.)))
 
 (defn- get-tables [database-id]
   (->> (hydrate (db/select Table, :db_id database-id, {:order-by [:id]}) :fields)
@@ -108,8 +104,7 @@
                            :display_name "New"
                            :parent_id    true})]]
   (tt/with-temp* [Database  [{database-id :id}]
-                  RawTable  [{raw-table-id :id}       {:database_id database-id}]
-                  Table     [{table-id :id, :as table} {:db_id database-id, :raw_table_id raw-table-id}]]
+                  Table     [{table-id :id, :as table} {:db_id database-id}]]
     (let [get-fields   (fn []
                          (for [field (db/select Field, :table_id table-id, {:order-by [:id]})]
                            (dissoc (tu/boolean-ids-and-timestamps field)
@@ -134,6 +129,8 @@
                      {:name "Third", :base-type :type/Boolean, :pk? true}
                      {:name "rating", :base-type :type/Integer, :nested-fields [{:name "new", :base-type :type/Boolean}]})])))
 
+(defn- scan-table-and-update-data-model!    [& _] (throw (UnsupportedOperationException.)))
+(defn- scan-database-and-update-data-model! [& _] (throw (UnsupportedOperationException.)))
 
 ;; scan-table-and-update-data-model!
 (expect
@@ -144,15 +141,13 @@
       :fields [])]]
   (tt/with-temp* [Database [{database-id :id, :as db} {:engine :toucanery}]]
     (let [driver (toucanery/->ToucaneryDriver)]
-      ;; do a quick introspection to add the RawTables to the db
-      (introspect/introspect-database-and-update-raw-tables! driver db)
+      ;; do a quick introspection to add the Tables to the db
+      #_(introspect/introspect-database-and-update-raw-tables! driver db)
       ;; stub out the Table we are going to sync for real below
-      (let [raw-table-id (db/select-one-id RawTable, :database_id database-id, :name "transactions")
-            tbl          (db/insert! Table
-                           :db_id        database-id
-                           :raw_table_id raw-table-id
-                           :name         "transactions"
-                           :active       true)]
+      (let [tbl (db/insert! Table
+                            :db_id        database-id
+                            :name         "transactions"
+                            :active       true)]
         [ ;; now lets run a sync and check what we got
          (do
            (scan-table-and-update-data-model! driver db tbl)
@@ -163,9 +158,9 @@
            (get-tables database-id))
          ;; one more time, but lets disable the table this time and ensure that's handled properly
          (do
-           (db/update-where! RawTable {:database_id database-id
-                                       :name        "transactions"}
-             :active false)
+           (db/update-where! Table {:database_id database-id
+                                    :name        "transactions"}
+                             :active false)
            (scan-table-and-update-data-model! driver db tbl)
            (get-tables database-id))]))))
 
@@ -181,11 +176,11 @@
            :fields []))]
   (tt/with-temp* [Database [{database-id :id, :as db} {:engine :toucanery}]]
     (let [driver (toucanery/->ToucaneryDriver)]
-      ;; do a quick introspection to add the RawTables to the db
-      (introspect/introspect-database-and-update-raw-tables! driver db)
+      ;; do a quick introspection to add the Tables to the db
+      #_(introspect/introspect-database-and-update-raw-tables! driver db)
 
       [ ;; first check that the raw tables stack up as expected, especially that fields were skipped because this is a :dynamic-schema db
-       (->> (hydrate (db/select RawTable, :database_id database-id, {:order-by [:id]}) :columns)
+       (->> (hydrate (db/select Table, :database_id database-id, {:order-by [:id]}) :columns)
             (mapv tu/boolean-ids-and-timestamps))
        ;; now lets run a sync and check what we got
        (do
@@ -197,7 +192,7 @@
          (get-tables database-id))
        ;; one more time, but lets disable a table this time and ensure that's handled properly
        (do
-         (db/update-where! RawTable {:database_id database-id
+         (db/update-where! Table {:database_id database-id
                                      :name        "transactions"}
            :active false)
          (scan-database-and-update-data-model! driver db)

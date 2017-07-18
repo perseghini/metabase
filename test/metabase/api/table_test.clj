@@ -5,7 +5,7 @@
              [driver :as driver]
              [http-client :as http]
              [middleware :as middleware]
-             [sync-database :as sync-database]
+             [sync :as sync]
              [util :as u]]
             [metabase.models
              [card :refer [Card]]
@@ -15,11 +15,11 @@
              [permissions-group :as perms-group]
              [table :refer [Table]]]
             [metabase.test
-             [data :as data :refer :all]
+             [data :as data]
              [util :as tu :refer [match-$ resolve-private-vars]]]
             [metabase.test.data
              [dataset-definitions :as defs]
-             [users :refer :all]]
+             [users :refer [user->client]]]
             [toucan.hydrate :as hydrate]
             [toucan.util.test :as tt]))
 
@@ -31,13 +31,13 @@
 ;; authentication test on every single individual endpoint
 
 (expect (get middleware/response-unauthentic :body) (http/client :get 401 "table"))
-(expect (get middleware/response-unauthentic :body) (http/client :get 401 (format "table/%d" (id :users))))
+(expect (get middleware/response-unauthentic :body) (http/client :get 401 (format "table/%d" (data/id :users))))
 
 
 ;; Helper Fns
 
 (defn- db-details []
-  (match-$ (db)
+  (match-$ (data/db)
     {:created_at         $
      :engine             "h2"
      :id                 $
@@ -61,7 +61,7 @@
    :field_values            {}
    :entity_name             nil
    :active                  true
-   :db_id                   (id)
+   :db_id                   (data/id)
    :segments                []
    :metrics                 []})
 
@@ -80,24 +80,24 @@
 ;; ## GET /api/table
 ;; These should come back in alphabetical order and include relevant metadata
 (expect
-  #{{:name         (format-name "categories")
+  #{{:name         (data/format-name "categories")
      :display_name "Categories"
      :rows         75
-     :id           (id :categories)}
-    {:name         (format-name "checkins")
+     :id           (data/id :categories)}
+    {:name         (data/format-name "checkins")
      :display_name "Checkins"
      :rows         1000
-     :id           (id :checkins)}
-    {:name         (format-name "users")
+     :id           (data/id :checkins)}
+    {:name         (data/format-name "users")
      :display_name "Users"
      :rows         15
-     :id           (id :users)}
-    {:name         (format-name "venues")
+     :id           (data/id :users)}
+    {:name         (data/format-name "venues")
      :display_name "Venues"
      :rows         100
-     :id           (id :venues)}}
+     :id           (data/id :venues)}}
   (->> ((user->client :rasta) :get 200 "table")
-       (filter #(= (:db_id %) (id))) ; prevent stray tables from affecting unit test results
+       (filter #(= (:db_id %) (data/id))) ; prevent stray tables from affecting unit test results
        (map #(dissoc %
                      :raw_table_id :db :created_at :updated_at :schema :entity_name :description :entity_type :visibility_type
                      :caveats :points_of_interest :show_in_getting_started :db_id :active))
@@ -107,18 +107,18 @@
 ;; ## GET /api/table/:id
 (expect
   (merge (dissoc (table-defaults) :segments :field_values :metrics)
-         (match-$ (Table (id :venues))
+         (match-$ (Table (data/id :venues))
            {:schema       "PUBLIC"
             :name         "VENUES"
             :display_name "Venues"
             :rows         100
             :updated_at   $
             :pk_field     (pk-field-id $$)
-            :id           (id :venues)
-            :db_id        (id)
+            :id           (data/id :venues)
+            :db_id        (data/id)
             :raw_table_id $
             :created_at   $}))
-  ((user->client :rasta) :get 200 (format "table/%d" (id :venues))))
+  ((user->client :rasta) :get 200 (format "table/%d" (data/id :venues))))
 
 ;; GET /api/table/:id should return a 403 for a user that doesn't have read permissions for the table
 (tt/expect-with-temp [Database [{database-id :id}]
@@ -132,12 +132,12 @@
 ;; ## GET /api/table/:id/query_metadata
 (expect
   (merge (table-defaults)
-         (match-$ (hydrate/hydrate (Table (id :categories)) :field_values)
+         (match-$ (hydrate/hydrate (Table (data/id :categories)) :field_values)
            {:schema       "PUBLIC"
             :name         "CATEGORIES"
             :display_name "Categories"
-            :fields       (let [defaults (assoc field-defaults :table_id (id :categories))]
-                            [(merge defaults (match-$ (Field (id :categories :id))
+            :fields       (let [defaults (assoc field-defaults :table_id (data/id :categories))]
+                            [(merge defaults (match-$ (Field (data/id :categories :id))
                                                {:special_type       "type/PK"
                                                 :name               "ID"
                                                 :display_name       "ID"
@@ -149,7 +149,7 @@
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
                                                 :last_analyzed      $}))
-                             (merge defaults (match-$ (Field (id :categories :name))
+                             (merge defaults (match-$ (Field (data/id :categories :name))
                                                {:special_type       "type/Name"
                                                 :name               "NAME"
                                                 :display_name       "Name"
@@ -163,11 +163,11 @@
                                                 :last_analyzed      $}))])
             :rows         75
             :updated_at   $
-            :id           (id :categories)
+            :id           (data/id :categories)
             :raw_table_id $
             :created_at   $
             :field_values (tu/obj->json->obj (:field_values $$))}))
-  ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (id :categories))))
+  ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (data/id :categories))))
 
 
 (def ^:private user-last-login-date-strs
@@ -192,12 +192,12 @@
 ;;; Make sure that getting the User table *does* include info about the password field, but not actual values themselves
 (expect
   (merge (table-defaults)
-         (match-$ (Table (id :users))
+         (match-$ (Table (data/id :users))
            {:schema       "PUBLIC"
             :name         "USERS"
             :display_name "Users"
-            :fields       (let [defaults (assoc field-defaults :table_id (id :users))]
-                            [(merge defaults (match-$ (Field (id :users :id))
+            :fields       (let [defaults (assoc field-defaults :table_id (data/id :users))]
+                            [(merge defaults (match-$ (Field (data/id :users :id))
                                                {:special_type       "type/PK"
                                                 :name               "ID"
                                                 :display_name       "ID"
@@ -209,7 +209,7 @@
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
                                                 :last_analyzed      $}))
-                             (merge defaults (match-$ (Field (id :users :last_login))
+                             (merge defaults (match-$ (Field (data/id :users :last_login))
                                                {:special_type       nil
                                                 :name               "LAST_LOGIN"
                                                 :display_name       "Last Login"
@@ -221,7 +221,7 @@
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
                                                 :last_analyzed      $}))
-                             (merge defaults (match-$ (Field (id :users :name))
+                             (merge defaults (match-$ (Field (data/id :users :name))
                                                {:special_type       "type/Name"
                                                 :name               "NAME"
                                                 :display_name       "Name"
@@ -233,7 +233,7 @@
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
                                                 :last_analyzed      $}))
-                             (merge defaults (match-$ (Field :table_id (id :users), :name "PASSWORD")
+                             (merge defaults (match-$ (Field :table_id (data/id :users), :name "PASSWORD")
                                                {:special_type       "type/Category"
                                                 :name               "PASSWORD"
                                                 :display_name       "Password"
@@ -247,9 +247,9 @@
                                                 :last_analyzed      $}))])
             :rows         15
             :updated_at   $
-            :id           (id :users)
+            :id           (data/id :users)
             :raw_table_id $
-            :field_values {(keyword (str (id :users :name)))
+            :field_values {(keyword (str (data/id :users :name)))
                            ["Broen Olujimi"
                             "Conchúr Tihomir"
                             "Dwight Gresham"
@@ -266,18 +266,18 @@
                             "Spiros Teofil"
                             "Szymon Theutrich"]}
             :created_at   $}))
-  ((user->client :rasta) :get 200 (format "table/%d/query_metadata?include_sensitive_fields=true" (id :users))))
+  ((user->client :rasta) :get 200 (format "table/%d/query_metadata?include_sensitive_fields=true" (data/id :users))))
 
 ;;; GET api/table/:id/query_metadata
 ;;; Make sure that getting the User table does *not* include password info
 (expect
   (merge (table-defaults)
-         (match-$ (Table (id :users))
+         (match-$ (Table (data/id :users))
            {:schema       "PUBLIC"
             :name         "USERS"
             :display_name "Users"
-            :fields       (let [defaults (assoc field-defaults :table_id (id :users))]
-                            [(merge defaults (match-$ (Field (id :users :id))
+            :fields       (let [defaults (assoc field-defaults :table_id (data/id :users))]
+                            [(merge defaults (match-$ (Field (data/id :users :id))
                                                {:special_type       "type/PK"
                                                 :name               "ID"
                                                 :display_name       "ID"
@@ -288,7 +288,7 @@
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
                                                 :last_analyzed      $}))
-                             (merge defaults (match-$ (Field (id :users :last_login))
+                             (merge defaults (match-$ (Field (data/id :users :last_login))
                                                {:special_type       nil
                                                 :name               "LAST_LOGIN"
                                                 :display_name       "Last Login"
@@ -299,7 +299,7 @@
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
                                                 :last_analyzed      $}))
-                             (merge defaults (match-$ (Field (id :users :name))
+                             (merge defaults (match-$ (Field (data/id :users :name))
                                                {:special_type       "type/Name"
                                                 :name               "NAME"
                                                 :display_name       "Name"
@@ -312,9 +312,9 @@
                                                 :last_analyzed      $}))])
             :rows         15
             :updated_at   $
-            :id           (id :users)
+            :id           (data/id :users)
             :raw_table_id $
-            :field_values {(keyword (str (id :users :name)))
+            :field_values {(keyword (str (data/id :users :name)))
                            ["Broen Olujimi"
                             "Conchúr Tihomir"
                             "Dwight Gresham"
@@ -331,7 +331,7 @@
                             "Spiros Teofil"
                             "Szymon Theutrich"]}
             :created_at   $}))
-  ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (id :users))))
+  ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (data/id :users))))
 
 ;; Check that FK fields belonging to Tables we don't have permissions for don't come back as hydrated `:target`(#3867)
 (expect
@@ -379,11 +379,11 @@
 
 (tt/expect-with-temp [Table [table {:rows 15}]]
   2
-  (let [original-sync-table! sync-database/sync-table!
+  (let [original-sync-table! sync/sync-table!
         called (atom 0)
         test-fun (fn [state]
-                   (with-redefs [sync-database/sync-table! (fn [& args] (swap! called inc)
-                                                             (apply original-sync-table! args))]
+                   (with-redefs [sync/sync-table! (fn [& args] (swap! called inc)
+                                                    (apply original-sync-table! args))]
                      ((user->client :crowberto) :put 200 (format "table/%d" (:id table)) {:display_name    "Userz"
                                                                                           :entity_type     "person"
                                                                                           :visibility_type state
@@ -401,8 +401,8 @@
 ;; ## GET /api/table/:id/fks
 ;; We expect a single FK from CHECKINS.USER_ID -> USERS.ID
 (expect
-  (let [checkins-user-field (Field (id :checkins :user_id))
-        users-id-field      (Field (id :users :id))]
+  (let [checkins-user-field (Field (data/id :checkins :user_id))
+        users-id-field      (Field (data/id :users :id))]
     [{:origin_id      (:id checkins-user-field)
       :destination_id (:id users-id-field)
       :relationship   "Mt1"
@@ -422,7 +422,7 @@
                                 :updated_at         $
                                 :last_analyzed      $
                                 :table              (merge (dissoc (table-defaults) :segments :field_values :metrics)
-                                                           (match-$ (Table (id :checkins))
+                                                           (match-$ (Table (data/id :checkins))
                                                              {:schema       "PUBLIC"
                                                               :name         "CHECKINS"
                                                               :display_name "Checkins"
@@ -447,7 +447,7 @@
                                 :updated_at         $
                                 :last_analyzed      $
                                 :table              (merge (dissoc (table-defaults) :db :segments :field_values :metrics)
-                                                           (match-$ (Table (id :users))
+                                                           (match-$ (Table (data/id :users))
                                                              {:schema       "PUBLIC"
                                                               :name         "USERS"
                                                               :display_name "Users"
@@ -456,7 +456,7 @@
                                                               :id           $
                                                               :raw_table_id $
                                                               :created_at   $}))}))}])
-  ((user->client :rasta) :get 200 (format "table/%d/fks" (id :users))))
+  ((user->client :rasta) :get 200 (format "table/%d/fks" (data/id :users))))
 
 
 ;; Make sure metadata for 'virtual' tables comes back as expected from GET /api/table/:id/query_metadata

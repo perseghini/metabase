@@ -5,16 +5,14 @@
             [metabase
              [db :as mdb]
              [driver :as driver]
-             [sync-database :refer :all]
+             [sync :refer :all]
              [util :as u]]
             [metabase.driver.generic-sql :as sql]
             [metabase.models
              [database :refer [Database]]
              [field :refer [Field]]
              [field-values :refer [FieldValues]]
-             [raw-table :refer [RawTable]]
              [table :refer [Table]]]
-            metabase.sync-database.analyze
             [metabase.test
              [data :refer :all]
              [util :as tu]]
@@ -170,12 +168,10 @@
                                  :name         "title"
                                  :display_name "Title"
                                  :base_type    :type/Text})]})
-  (tt/with-temp* [Database [db        {:engine :sync-test}]
-                  RawTable [raw-table {:database_id (u/get-id db), :name "movie", :schema "default"}]
-                  Table    [table     {:raw_table_id (u/get-id raw-table)
-                                       :name         "movie"
-                                       :schema       "default"
-                                       :db_id        (u/get-id db)}]]
+  (tt/with-temp* [Database [db    {:engine :sync-test}]
+                  Table    [table {:name   "movie"
+                                   :schema "default"
+                                   :db_id  (u/get-id db)}]]
     (sync-table! table)
     (table-details (Table (:id table)))))
 
@@ -222,7 +218,7 @@
   [[1 2 3]
    [1 2 3]]
   (tt/with-temp* [Database [db    {:engine :sync-test}]
-                  RawTable [table {:database_id (u/get-id db), :name "movie", :schema "default"}]]
+                  Table    [table {:database_id (u/get-id db), :name "movie", :schema "default"}]]
     (sync-database! db)
     (let [table-id (db/select-one-id Table, :raw_table_id (:id table))
           field-id (db/select-one-id Field, :table_id table-id, :name "title")]
@@ -349,6 +345,6 @@
             (assert (= (count (db/select-one-field :values FieldValues :field_id field-id))
                        100))
             ;; ok, now insert enough rows to push the field past the `low-cardinality-threshold` and sync again, there should be no more field values
-            (exec! [(insert-range-sql (range 100 (+ 100 @(resolve 'metabase.sync-database.analyze/low-cardinality-threshold))))])
+            (exec! [(insert-range-sql (range 100 (+ 100 @(resolve 'metabase.sync.analyze.special-types/low-cardinality-threshold))))])
             (sync-database! db, :full-sync? true)
             (db/exists? FieldValues :field_id field-id)))))))

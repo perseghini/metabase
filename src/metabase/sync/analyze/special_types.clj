@@ -106,7 +106,8 @@
     ;; this field isn't suited for this test
     field-stats
     ;; test for avg length
-    (let [avg-len (u/try-apply (:field-avg-length driver) field)]
+    (throw (UnsupportedOperationException.))
+    #_(let [avg-len (u/try-apply (:field-avg-length driver) field)]
       (if-not (and avg-len (> avg-len average-length-no-preview-threshold))
         field-stats
         (do
@@ -219,7 +220,7 @@
 (s/defn ^:private ^:always-validate infer-special-types-for-table!
   [table :- TableInstance]
   ;; TODO - need to do the actual special type tests
-  (throw (NoSuchMethodException.))
+  (throw (UnsupportedOperationException.))
   (update-fields-last-analyzed! table))
 
 

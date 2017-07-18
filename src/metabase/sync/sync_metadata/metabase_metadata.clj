@@ -69,4 +69,4 @@
     (sync-metabase-metadata-table! (driver/engine->driver (:engine database)) database metadata-table)))
 
 (s/defn ^:always-validate sync-metabase-metadata! [database :- DatabaseInstance]
-  (throw (NoSuchMethodException.)))
+  (throw (UnsupportedOperationException.)))

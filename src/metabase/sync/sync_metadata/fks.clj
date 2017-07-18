@@ -30,7 +30,7 @@
 (s/defn ^:private ^:always-validate sync-fks-for-table!
   [database :- DatabaseInstance, table :- TableInstance]
   (let [metadata (fetch-metadata/fk-metadata database table)]
-    (throw (NoSuchMethodException.))))
+    (throw (UnsupportedOperationException.))))
 
 (s/defn ^:always-validate sync-fks!
   [database :- DatabaseInstance]

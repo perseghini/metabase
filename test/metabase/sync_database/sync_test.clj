@@ -3,12 +3,7 @@
             [metabase.models
              [database :refer [Database]]
              [field :refer [Field]]
-             [raw-column :refer [RawColumn]]
-             [raw-table :refer [RawTable]]
              [table :refer [Table]]]
-            [metabase.sync-database
-             [introspect :as introspect]
-             [sync :refer :all]]
             [metabase.test
              [data :as data]
              [util :as tu]]
@@ -21,8 +16,13 @@
              [hydrate :refer [hydrate]]]
             [toucan.util.test :as tt]))
 
-(tu/resolve-private-vars metabase.sync-database.sync
-  save-fks! save-table-fields!)
+(defn- save-fks!                           [& _] (throw (UnsupportedOperationException.)))
+(defn- save-table-fields!                  [& _] (throw (UnsupportedOperationException.)))
+(defn- update-data-models-for-table!       [& _] (throw (UnsupportedOperationException.)))
+(defn- sync-metabase-metadata-table!       [& _] (throw (UnsupportedOperationException.)))
+(defn- update-data-models-from-raw-tables! [& _] (throw (UnsupportedOperationException.)))
+(defn- retire-tables!                      [& _] (throw (UnsupportedOperationException.)))
+
 
 (defn- get-tables [database-id]
   (->> (hydrate (db/select Table, :db_id database-id, {:order-by [:id]}) :fields)
@@ -35,17 +35,17 @@
    [{:special_type :type/FK, :name "fk1", :fk_target_field_id true}]
    [{:special_type :type/FK, :name "fk1", :fk_target_field_id true}]
    [{:special_type :type/FK, :name "fk1", :fk_target_field_id true}]]
-  (tt/with-temp* [Database  [{database-id :id}]
-                  RawTable  [{raw-table-id1 :id, :as table}  {:database_id database-id, :name "fk_source"}]
-                  RawColumn [{raw-fk1 :id}                   {:raw_table_id raw-table-id1, :name "fk1"}]
-                  Table     [{t1 :id}                        {:db_id database-id, :raw_table_id raw-table-id1, :name "fk_source"}]
-                  Field     [{fk1 :id}                       {:table_id t1, :raw_column_id raw-fk1, :name "fk1"}]
-                  RawTable  [{raw-table-id2 :id, :as table1} {:database_id database-id, :name "fk_target"}]
-                  RawColumn [{raw-target1 :id}               {:raw_table_id raw-table-id2, :name "target1"}]
-                  RawColumn [{raw-target2 :id}               {:raw_table_id raw-table-id2, :name "target2"}]
-                  Table     [{t2 :id}                        {:db_id database-id, :raw_table_id raw-table-id2, :name "fk_target"}]
-                  Field     [{target1 :id}                   {:table_id t2, :raw_column_id raw-target1, :name "target1"}]
-                  Field     [{target2 :id}                   {:table_id t2, :raw_column_id raw-target2, :name "target2"}]]
+  (tt/with-temp* [Database [{database-id :id}]
+                  Table    [{table-id-1 :id, :as table}  {:database_id database-id, :name "fk_source"}]
+                  Field    [{raw-fk1 :id}                {:raw_table_id table-id-1, :name "fk1"}]
+                  Table    [{t1 :id}                     {:db_id database-id, :raw_table_id table-id-1, :name "fk_source"}]
+                  Field    [{fk1 :id}                    {:table_id t1, :raw_column_id raw-fk1, :name "fk1"}]
+                  Table    [{table-id-2 :id, :as table1} {:database_id database-id, :name "fk_target"}]
+                  Field    [{field-id-1 :id}             {:raw_table_id table-id-2, :name "target1"}]
+                  Field    [{field-id-2 :id}             {:raw_table_id table-id-2, :name "target2"}]
+                  Table    [{t2 :id}                     {:db_id database-id, :raw_table_id table-id-2, :name "fk_target"}]
+                  Field    [{target1 :id}                {:table_id t2, :raw_column_id field-id-1, :name "target1"}]
+                  Field    [{target2 :id}                {:table_id t2, :raw_column_id field-id-2, :name "target2"}]]
     (let [get-fields (fn [table-id]
                        (->> (db/select [Field :name :special_type :fk_target_field_id], :table_id table-id)
                             (mapv tu/boolean-ids-and-timestamps)))]
@@ -53,16 +53,16 @@
        (get-fields t1)
        ;; now add a fk
        (do
-         (save-fks! [{:source-column raw-fk1, :target-column raw-target1}])
+         (save-fks! [{:source-column raw-fk1, :target-column field-id-1}])
          (get-fields t1))
        ;; if the source/target is wack nothing bad happens
        (do
          (save-fks! [{:source-column raw-fk1, :target-column 87893243}
-                     {:source-column 987234, :target-column raw-target1}])
+                     {:source-column 987234, :target-column field-id-1}])
          (get-fields t1))
        ;; replacing an existing fk
        (do
-         (save-fks! [{:source-column raw-fk1, :target-column raw-target2}])
+         (save-fks! [{:source-column raw-fk1, :target-column field-id-2}])
          (get-fields t1))])))
 
 
@@ -80,11 +80,11 @@
               :description "If the movie is currently being filmed."}]}]
   (tt/with-temp* [Database [{database-id :id, :as db} {:engine :moviedb}]]
     ;; setup a couple things we'll use in the test
-    (introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
-    (let [raw-table-id (db/select-one-id RawTable, :database_id database-id, :name "movies")
+    #_(introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
+    (let [table-id- (db/select-one-id Table, :database_id database-id, :name "movies")
           table        (db/insert! Table
                          :db_id        database-id
-                         :raw_table_id raw-table-id
+                         :raw_table_id table-id-
                          :name         "movies"
                          :active       true)
           get-table    #(-> (db/select-one [Table :id :name :description], :id (:id table))
@@ -154,7 +154,7 @@
    [(merge field-defaults {:name            "First"
                            :display_name    "First"
                            :base_type       :type/Decimal
-                           :visibility_type :retired ; field retired when RawColumn disabled
+                           :visibility_type :retired ; field retired when Field disabled
                            :special_type    :type/PK})
     (merge field-defaults {:name         "Second"
                            :display_name "Second"
@@ -168,11 +168,11 @@
                            :base_type    :type/Integer
                            :special_type :type/Category})]]
   (tt/with-temp* [Database  [{database-id :id}]
-                  RawTable  [{raw-table-id :id, :as table} {:database_id database-id}]
-                  RawColumn [{raw-column-id1 :id}          {:raw_table_id raw-table-id, :name "First", :is_pk true, :details {:base-type "type/Integer"}}]
-                  RawColumn [{raw-column-id2 :id}          {:raw_table_id raw-table-id, :name "Second", :details {:base-type "type/Text"}}]
-                  RawColumn [{raw-column-id3 :id}          {:raw_table_id raw-table-id, :name "Third", :details {:base-type "type/Boolean"}}]
-                  Table     [{table-id :id, :as tbl}       {:db_id database-id, :raw_table_id raw-table-id}]]
+                  Table  [{table-id- :id, :as table} {:database_id database-id}]
+                  Field [{raw-column-id1 :id}          {:raw_table_id table-id-, :name "First", :is_pk true, :details {:base-type "type/Integer"}}]
+                  Field [{raw-column-id2 :id}          {:raw_table_id table-id-, :name "Second", :details {:base-type "type/Text"}}]
+                  Field [{raw-column-id3 :id}          {:raw_table_id table-id-, :name "Third", :details {:base-type "type/Boolean"}}]
+                  Table     [{table-id :id, :as tbl}       {:db_id database-id, :raw_table_id table-id-}]]
     (let [get-fields #(->> (db/select Field, :table_id table-id, {:order-by [:id]})
                            (mapv tu/boolean-ids-and-timestamps)
                            (mapv (fn [m]
@@ -181,20 +181,20 @@
           first-sync     (do
                            (save-table-fields! tbl)
                            (get-fields))]
-      (tt/with-temp* [RawColumn [_ {:raw_table_id raw-table-id, :name "rating", :details {:base-type "type/Integer"}}]]
+      (tt/with-temp* [Field [_ {:raw_table_id table-id-, :name "rating", :details {:base-type "type/Integer"}}]]
         ;; start with no fields
         [initial-fields
          ;; first sync will add all the fields
          first-sync
          ;; now add another column and modify the first
          (do
-           (db/update! RawColumn raw-column-id1, :is_pk false, :details {:base-type "type/Decimal"})
+           (db/update! Field raw-column-id1, :is_pk false, :details {:base-type "type/Decimal"})
            (save-table-fields! tbl)
            (get-fields))
          ;; now disable the first column
          (do
-           (db/update! RawColumn raw-column-id1, :active false)
-           (db/update! RawColumn raw-column-id3, :is_pk true)
+           (db/update! Field raw-column-id1, :active false)
+           (db/update! Field raw-column-id3, :is_pk true)
            (save-table-fields! tbl)
            (get-fields))]))))
 
@@ -211,7 +211,7 @@
      (mapv disabled-movies-table moviedb/moviedb-tables-and-fields)])
   (tt/with-temp* [Database [{database-id :id, :as db} {:engine :moviedb}]]
     ;; setup a couple things we'll use in the test
-    (introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
+    #_(introspect/introspect-database-and-update-raw-tables! (moviedb/->MovieDbDriver) db)
     (update-data-models-from-raw-tables! db)
     (let [get-tables #(->> (hydrate (db/select Table, :db_id database-id, {:order-by [:id]}) :fields)
                            (mapv tu/boolean-ids-and-timestamps))]
@@ -219,7 +219,7 @@
       [(get-tables)
        (do
          ;; disable the table
-         (db/update-where! RawTable {:database_id database-id
+         (db/update-where! Table {:database_id database-id
                                      :name        "movies"}
            :active false)
          ;; run our retires function
@@ -246,14 +246,14 @@
                  :fields []))]])
   (tt/with-temp* [Database [{database-id :id, :as db} {:engine :moviedb}]]
     (let [driver (moviedb/->MovieDbDriver)]
-      ;; do a quick introspection to add the RawTables to the db
-      (introspect/introspect-database-and-update-raw-tables! driver db)
+      ;; do a quick introspection to add the Tables to the db
+      #_(introspect/introspect-database-and-update-raw-tables! driver db)
 
       ;; stub out the Table we are going to sync for real below
-      (let [raw-table-id (db/select-one-id RawTable, :database_id database-id, :name "roles")
+      (let [table-id- (db/select-one-id Table, :database_id database-id, :name "roles")
             table        (db/insert! Table
                            :db_id        database-id
-                           :raw_table_id raw-table-id
+                           :raw_table_id table-id-
                            :name         "roles"
                            :active       true)]
         [ ;; now lets run a sync and check what we got
@@ -266,7 +266,7 @@
            (get-tables database-id))
          ;; one more time, but lets disable the table this time and ensure that's handled properly
          (do
-           (db/update-where! RawTable {:database_id database-id
+           (db/update-where! Table {:database_id database-id
                                        :name        "roles"}
              :active false)
            (update-data-models-for-table! table)
@@ -284,11 +284,11 @@
                     :fields [])))]
   (tt/with-temp* [Database [{database-id :id, :as db} {:engine :moviedb}]]
     (let [driver (moviedb/->MovieDbDriver)]
-      ;; do a quick introspection to add the RawTables to the db
-      (introspect/introspect-database-and-update-raw-tables! driver db)
+      ;; do a quick introspection to add the Tables to the db
+      #_(introspect/introspect-database-and-update-raw-tables! driver db)
 
       [;; first check that the raw tables stack up as expected
-       (->> (hydrate (db/select RawTable, :database_id database-id, {:order-by [:id]}) :columns)
+       (->> (hydrate (db/select Table, :database_id database-id, {:order-by [:id]}) :columns)
             (mapv tu/boolean-ids-and-timestamps))
        ;; now lets run a sync and check what we got
        (do
@@ -300,7 +300,7 @@
          (get-tables database-id))
        ;; one more time, but lets disable a table this time and ensure that's handled properly
        (do
-         (db/update-where! RawTable {:database_id database-id
+         (db/update-where! Table {:database_id database-id
                                      :name        "roles"}
            :active false)
          (update-data-models-from-raw-tables! db)
@@ -311,8 +311,8 @@
   "Convert :fk_target_[column|field]_id into more testable information with table/schema names."
   [m]
   (let [resolve-raw-column (fn [column-id]
-                             (when-let [{col-name :name, table :raw_table_id} (db/select-one [RawColumn :raw_table_id :name], :id column-id)]
-                               (-> (db/select-one [RawTable :schema :name], :id table)
+                             (when-let [{col-name :name, table :raw_table_id} (db/select-one [Field :raw_table_id :name], :id column-id)]
+                               (-> (db/select-one [Table :schema :name], :id table)
                                    (assoc :col-name col-name))))
         resolve-field      (fn [field-id]
                              (when-let [{col-name :name, table :table_id} (db/select-one [Field :table_id :name], :id field-id)]
@@ -340,11 +340,11 @@
           db-tables  #(->> (hydrate (db/select Table, :db_id %, {:order-by [:id]}) :fields)
                            (mapv resolve-fk-targets)
                            (mapv tu/boolean-ids-and-timestamps))]
-      ;; do a quick introspection to add the RawTables to the db
-      (introspect/introspect-database-and-update-raw-tables! driver db)
+      ;; do a quick introspection to add the Tables to the db
+      #_(introspect/introspect-database-and-update-raw-tables! driver db)
 
       [;; first check that the raw tables stack up as expected
-       (->> (hydrate (db/select RawTable, :database_id database-id, {:order-by [:id]}) :columns)
+       (->> (hydrate (db/select Table, :database_id database-id, {:order-by [:id]}) :columns)
             (mapv resolve-fk-targets)
             (mapv tu/boolean-ids-and-timestamps))
        ;; now lets run a sync and check what we got

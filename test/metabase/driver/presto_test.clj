@@ -127,7 +127,7 @@
    {:name "Brite Spot Family Restaurant", :price 2, :category_id 20, :id 5}]
   (for [row (take 5 (sort-by :id (driver/table-rows-seq (PrestoDriver.)
                                                         (db/select-one 'Database :id (data/id))
-                                                        (db/select-one 'RawTable :id (db/select-one-field :raw_table_id 'Table, :id (data/id :venues))))))]
+                                                        (db/select-one 'Table :id (data/id :venues)))))]
     (-> (dissoc row :latitude :longitude)
         (update :price int)
         (update :category_id int)

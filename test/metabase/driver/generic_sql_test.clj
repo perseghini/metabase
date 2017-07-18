@@ -1,7 +1,7 @@
 (ns metabase.driver.generic-sql-test
   (:require [expectations :refer :all]
             [metabase.driver :as driver]
-            [metabase.driver.generic-sql :refer :all]
+            [metabase.driver.generic-sql :refer :all :as sql]
             [metabase.models
              [field :refer [Field]]
              [table :as table :refer [Table]]]
@@ -19,7 +19,6 @@
 (def ^:private generic-sql-engines
   (delay (set (for [engine datasets/all-valid-engines
                     :let   [driver (driver/engine->driver engine)]
-                    :when  (not (contains? #{:bigquery :presto} engine))                 ; bigquery and presto don't use the generic sql implementations of things like `field-avg-length`
                     :when  (extends? ISQLDriver (class driver))]
                 (do (require (symbol (str "metabase.test.data." (name engine))) :reload) ; otherwise it gets all snippy if you try to do `lein test metabase.driver.generic-sql-test`
                     engine)))))
@@ -80,15 +79,15 @@
   ;; NOCOMMIT
   #_(driver/analyze-table (H2Driver.) @venues-table (set (mapv :id (table/fields @venues-table)))))
 
-(resolve-private-vars metabase.driver.generic-sql field-avg-length field-values-lazy-seq table-rows-seq)
-
 ;;; FIELD-AVG-LENGTH
 (datasets/expect-with-engines @generic-sql-engines
   ;; Not sure why some databases give different values for this but they're close enough that I'll allow them
   (if (contains? #{:redshift :sqlserver} datasets/*engine*)
     15
     16)
-  (field-avg-length datasets/*driver* (db/select-one 'Field :id (id :venues :name))))
+  ;; TODO - this test should me moved somewhere generic so all drivers can use it
+  (throw (UnsupportedOperationException.))
+  #_(#'sql/field-avg-length datasets/*driver* (db/select-one 'Field :id (id :venues :name))))
 
 ;;; FIELD-VALUES-LAZY-SEQ
 (datasets/expect-with-engines @generic-sql-engines
@@ -97,7 +96,7 @@
    "The Apple Pan"
    "Wurstküche"
    "Brite Spot Family Restaurant"]
-  (take 5 (field-values-lazy-seq datasets/*driver* (db/select-one 'Field :id (id :venues :name)))))
+  (take 5 (#'sql/field-values-lazy-seq datasets/*driver* (db/select-one 'Field :id (id :venues :name)))))
 
 
 ;;; TABLE-ROWS-SEQ
@@ -107,9 +106,9 @@
    {:name "The Apple Pan",                :price 2, :category_id 11, :id 3}
    {:name "Wurstküche",                   :price 2, :category_id 29, :id 4}
    {:name "Brite Spot Family Restaurant", :price 2, :category_id 20, :id 5}]
-  (for [row (take 5 (sort-by :id (table-rows-seq datasets/*driver*
+  (for [row (take 5 (sort-by :id (#'sql/table-rows-seq datasets/*driver*
                                                  (db/select-one 'Database :id (id))
-                                                 (db/select-one 'RawTable :id (db/select-one-field :raw_table_id 'Table, :id (id :venues))))))]
+                                                 (db/select-one 'Table :id (id :venues)))))]
     ;; different DBs use different precisions for these
     (-> (dissoc row :latitude :longitude)
         (update :price int)

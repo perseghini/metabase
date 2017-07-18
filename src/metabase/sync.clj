@@ -24,18 +24,15 @@
   ([database]
    (sync-database! database {:full-sync? true}))
   ([database :- DatabaseInstance, options :- SyncDatabaseOptions]
-   (sync-util/with-sync-events :database-sync (u/get-id database))
-   (driver/sync-in-context (driver/->driver database) database
-     (fn []
-       ;; First make sure Tables, Fields, and FK information is up-to-date
-       (sync-metadata/sync-db-metadata! database)
-       (when (:full-sync? options)
-         ;; Next, run the 'analysis' step where we do things like scan values of fields and update special types accordingly
-         (analyze/analyze-db! database)
-         ;; Finally, update FieldValues
-         (field-values/update-field-values! database))))))
+   ;; First make sure Tables, Fields, and FK information is up-to-date
+   (sync-metadata/sync-db-metadata! database)
+   (when (:full-sync? options)
+     ;; Next, run the 'analysis' step where we do things like scan values of fields and update special types accordingly
+     (analyze/analyze-db! database)
+     ;; Finally, update FieldValues
+     (field-values/update-field-values! database))))
 
 
 (s/defn ^:always-validate sync-table!
   [table :- TableInstance]
-  (throw (NoSuchMethodException.)))
+  (throw (UnsupportedOperationException.)))

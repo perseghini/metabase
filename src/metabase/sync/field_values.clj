@@ -48,4 +48,4 @@
 
 (s/defn ^:always-validate update-field-values! [database :- DatabaseInstance]
   (sync-util/sync-operation :cache-field-values database (format "Cache field values in %s" (sync-util/name-for-logging database))
-    (throw (NoSuchMethodException.))))
+    (throw (UnsupportedOperationException.))))
