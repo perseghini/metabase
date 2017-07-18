@@ -30,7 +30,7 @@
   100)
 
 (def ^:private ^:const ^Integer field-values-total-max-length
-  "Maximum total length for a FieldValues entry (combined length of all values for the field)."
+  "Maximum total length for a `FieldValues` entry (combined length of all values for the field)."
   (* low-cardinality-threshold field-values-entry-max-length))
 
 (def ^:private ^:const ^Integer average-length-no-preview-threshold

@@ -368,6 +368,13 @@
       (when-let [engine (db-id->engine db-id)]
         (engine->driver engine)))))
 
+(defn ->driver
+  "Return an appropraiate driver for ENGINE-OR-DATABASE-OR-DB-ID."
+  [engine-or-database-or-db-id]
+  (if (keyword? engine-or-database-or-db-id)
+    (engine->driver engine-or-database-or-db-id)
+    (database-id->driver (u/get-id engine-or-database-or-db-id))))
+
 
 ;; ## Implementation-Agnostic Driver API
 
