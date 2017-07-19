@@ -21,6 +21,7 @@
              [dataset-definitions :as defs]
              [users :refer [user->client]]]
             [toucan.hydrate :as hydrate]
+            [toucan.db :as db]
             [toucan.util.test :as tt]))
 
 (resolve-private-vars metabase.models.table pk-field-id)
@@ -58,7 +59,6 @@
    :entity_type             nil
    :visibility_type         nil
    :db                      (db-details)
-   :field_values            {}
    :entity_name             nil
    :active                  true
    :db_id                   (data/id)
@@ -128,11 +128,10 @@
     (perms/delete-related-permissions! (perms-group/all-users) (perms/object-path database-id))
     ((user->client :rasta) :get 403 (str "table/" table-id))))
 
-
 ;; ## GET /api/table/:id/query_metadata
 (expect
   (merge (table-defaults)
-         (match-$ (hydrate/hydrate (Table (data/id :categories)) :field_values)
+         (match-$ (Table (data/id :categories))
            {:schema       "PUBLIC"
             :name         "CATEGORIES"
             :display_name "Categories"
@@ -148,7 +147,9 @@
                                                 :base_type          "type/BigInteger"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             []}))
                              (merge defaults (match-$ (Field (data/id :categories :name))
                                                {:special_type       "type/Name"
                                                 :name               "NAME"
@@ -160,13 +161,14 @@
                                                 :base_type          "type/Text"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))])
+                                                :last_analyzed      $
+                                                :values             venue-categories
+                                                :dimensions         []}))])
             :rows         75
             :updated_at   $
             :id           (data/id :categories)
             :raw_table_id $
-            :created_at   $
-            :field_values (tu/obj->json->obj (:field_values $$))}))
+            :created_at   $}))
   ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (data/id :categories))))
 
 
@@ -178,15 +180,14 @@
                               (+ (.getYear inst) 1900)
                               (+ (.getMonth inst) 1)
                               (.getDate inst)))]
-    (->> defs/test-data
-         :table-definitions
-         first
-         :rows
-         (map second)
+    (->> (defs/field-values defs/test-data-map "users" "last_login")
          (map format-inst)
          set
          sort
          vec)))
+
+(def ^:private user-full-names
+  (defs/field-values defs/test-data-map "users" "name"))
 
 ;;; GET api/table/:id/query_metadata?include_sensitive_fields
 ;;; Make sure that getting the User table *does* include info about the password field, but not actual values themselves
@@ -208,7 +209,9 @@
                                                 :visibility_type    "normal"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             []}))
                              (merge defaults (match-$ (Field (data/id :users :last_login))
                                                {:special_type       nil
                                                 :name               "LAST_LOGIN"
@@ -220,7 +223,9 @@
                                                 :visibility_type    "normal"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             []}))
                              (merge defaults (match-$ (Field (data/id :users :name))
                                                {:special_type       "type/Name"
                                                 :name               "NAME"
@@ -232,7 +237,9 @@
                                                 :visibility_type    "normal"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             (map vector (sort user-full-names))}))
                              (merge defaults (match-$ (Field :table_id (data/id :users), :name "PASSWORD")
                                                {:special_type       "type/Category"
                                                 :name               "PASSWORD"
@@ -244,27 +251,13 @@
                                                 :visibility_type    "sensitive"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))])
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             []}))])
             :rows         15
             :updated_at   $
             :id           (data/id :users)
             :raw_table_id $
-            :field_values {(keyword (str (data/id :users :name)))
-                           ["Broen Olujimi"
-                            "Conchúr Tihomir"
-                            "Dwight Gresham"
-                            "Felipinho Asklepios"
-                            "Frans Hevel"
-                            "Kaneonuskatew Eiran"
-                            "Kfir Caj"
-                            "Nils Gotam"
-                            "Plato Yeshua"
-                            "Quentin Sören"
-                            "Rüstem Hebel"
-                            "Shad Ferdynand"
-                            "Simcha Yan"
-                            "Spiros Teofil"
-                            "Szymon Theutrich"]}
             :created_at   $}))
   ((user->client :rasta) :get 200 (format "table/%d/query_metadata?include_sensitive_fields=true" (data/id :users))))
 
@@ -287,7 +280,9 @@
                                                 :base_type          "type/BigInteger"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             []}))
                              (merge defaults (match-$ (Field (data/id :users :last_login))
                                                {:special_type       nil
                                                 :name               "LAST_LOGIN"
@@ -298,7 +293,9 @@
                                                 :base_type          "type/DateTime"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             []}))
                              (merge defaults (match-$ (Field (data/id :users :name))
                                                {:special_type       "type/Name"
                                                 :name               "NAME"
@@ -309,27 +306,27 @@
                                                 :base_type          "type/Text"
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
-                                                :last_analyzed      $}))])
+                                                :last_analyzed      $
+                                                :dimensions         []
+                                                :values             [["Broen Olujimi"]
+                                                                     ["Conchúr Tihomir"]
+                                                                     ["Dwight Gresham"]
+                                                                     ["Felipinho Asklepios"]
+                                                                     ["Frans Hevel"]
+                                                                     ["Kaneonuskatew Eiran"]
+                                                                     ["Kfir Caj"]
+                                                                     ["Nils Gotam"]
+                                                                     ["Plato Yeshua"]
+                                                                     ["Quentin Sören"]
+                                                                     ["Rüstem Hebel"]
+                                                                     ["Shad Ferdynand"]
+                                                                     ["Simcha Yan"]
+                                                                     ["Spiros Teofil"]
+                                                                     ["Szymon Theutrich"]]}))])
             :rows         15
             :updated_at   $
             :id           (data/id :users)
             :raw_table_id $
-            :field_values {(keyword (str (data/id :users :name)))
-                           ["Broen Olujimi"
-                            "Conchúr Tihomir"
-                            "Dwight Gresham"
-                            "Felipinho Asklepios"
-                            "Frans Hevel"
-                            "Kaneonuskatew Eiran"
-                            "Kfir Caj"
-                            "Nils Gotam"
-                            "Plato Yeshua"
-                            "Quentin Sören"
-                            "Rüstem Hebel"
-                            "Shad Ferdynand"
-                            "Simcha Yan"
-                            "Spiros Teofil"
-                            "Szymon Theutrich"]}
             :created_at   $}))
   ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (data/id :users))))
 
@@ -397,7 +394,6 @@
         (test-fun "technical")
         @called)))
 
-
 ;; ## GET /api/table/:id/fks
 ;; We expect a single FK from CHECKINS.USER_ID -> USERS.ID
 (expect
@@ -458,7 +454,6 @@
                                                               :created_at   $}))}))}])
   ((user->client :rasta) :get 200 (format "table/%d/fks" (data/id :users))))
 
-
 ;; Make sure metadata for 'virtual' tables comes back as expected from GET /api/table/:id/query_metadata
 (tt/expect-with-temp [Card [card {:name          "Go Dubs!"
                                   :database_id   (data/id)
@@ -492,3 +487,88 @@
 (expect
   []
   ((user->client :crowberto) :get 200 "table/card__1000/fks"))
+
+(defn- narrow-fields [category-names api-response]
+  (for [field (:fields api-response)
+        :when (contains? (set category-names) (:name field))]
+    (-> field
+        (select-keys [:id :table_id :name :values :dimensions])
+        (update :dimensions (fn [dim]
+                              (if (map? dim)
+                                (dissoc dim :id :created_at :updated_at)
+                                dim))))))
+
+(defn- category-id-special-type
+  "Field values will only be returned when the field's special type is
+  set to type/Category. This function will change that for
+  category_id, then invoke `F` and roll it back afterwards"
+  [special-type f]
+  (let [original-special-type (:special_type (Field (data/id :venues :category_id)))]
+    (try
+      (db/update! Field (data/id :venues :category_id) {:special_type special-type})
+      (f)
+      (finally
+        (db/update! Field (data/id :venues :category_id) {:special_type original-special-type})))))
+
+;; ## GET /api/table/:id/query_metadata
+;; Ensure internal remapped dimensions and human_readable_values are returned
+(expect
+  [{:table_id (data/id :venues)
+    :id (data/id :venues :category_id)
+    :name "CATEGORY_ID"
+    :values (map-indexed (fn [idx [category]] [idx category]) venue-categories)
+    :dimensions {:name "Foo", :field_id (data/id :venues :category_id), :human_readable_field_id nil, :type "internal"}}
+   {:id (data/id :venues :price)
+    :table_id (data/id :venues)
+    :name "PRICE"
+    :values [[1] [2] [3] [4]]
+    :dimensions []}]
+  (with-data
+    (create-venue-category-remapping "Foo")
+    (category-id-special-type
+     :type/Category
+     (fn []
+       (narrow-fields ["PRICE" "CATEGORY_ID"]
+                      ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (data/id :venues))))))))
+
+;; ## GET /api/table/:id/query_metadata
+;; Ensure internal remapped dimensions and human_readable_values are returned when type is enum
+(expect
+  [{:table_id (data/id :venues)
+    :id (data/id :venues :category_id)
+    :name "CATEGORY_ID"
+    :values (map-indexed (fn [idx [category]] [idx category]) venue-categories)
+    :dimensions {:name "Foo", :field_id (data/id :venues :category_id), :human_readable_field_id nil, :type "internal"}}
+   {:id (data/id :venues :price)
+    :table_id (data/id :venues)
+    :name "PRICE"
+    :values [[1] [2] [3] [4]]
+    :dimensions []}]
+  (with-data
+    (create-venue-category-remapping "Foo")
+    (category-id-special-type
+     :type/Enum
+     (fn []
+       (narrow-fields ["PRICE" "CATEGORY_ID"]
+                      ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (data/id :venues))))))))
+
+;; ## GET /api/table/:id/query_metadata
+;; Ensure FK remappings are returned
+(expect
+  [{:table_id (data/id :venues)
+    :id (data/id :venues :category_id)
+    :name "CATEGORY_ID"
+    :values []
+    :dimensions {:name "Foo", :field_id (data/id :venues :category_id), :human_readable_field_id (data/id :categories :name), :type "external"}}
+   {:id (data/id :venues :price)
+    :table_id (data/id :venues)
+    :name "PRICE"
+    :values [[1] [2] [3] [4]]
+    :dimensions []}]
+  (with-data
+    (create-venue-category-fk-remapping "Foo")
+    (category-id-special-type
+     :type/Category
+     (fn []
+       (narrow-fields ["PRICE" "CATEGORY_ID"]
+                      ((user->client :rasta) :get 200 (format "table/%d/query_metadata" (data/id :venues))))))))
