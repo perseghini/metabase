@@ -70,8 +70,6 @@
 
 
 ;;; infer-field-special-type
-
-(expect nil            (#'name/infer-special-type-by-name "id"      nil))
 (expect :type/PK       (#'name/infer-special-type-by-name "id"      :type/Integer))
 ;; other pattern matches based on type/regex (remember, base_type matters in matching!)
 (expect :type/Category (#'name/infer-special-type-by-name "rating"  :type/Integer))

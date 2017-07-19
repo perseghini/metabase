@@ -1,13 +1,13 @@
 (ns metabase.driver
-  (:require [clojure.math.numeric-tower :as math]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [medley.core :as m]
             [metabase.models
              [database :refer [Database]]
              field
-             [setting :refer [defsetting]]
-             table]
+             table
+             [setting :refer [defsetting]]]
             [metabase.util :as u]
+            [schema.core :as s]
             [toucan.db :as db])
   (:import clojure.lang.Keyword
            metabase.models.database.DatabaseInstance
@@ -199,18 +199,10 @@
      There is no expectation that the results be returned in any given order."))
 
 
-(defn- percent-valid-urls
-  "Recursively count the values of non-nil values in VS that are valid URLs, and return it as a percentage."
-  [vs]
-  (loop [valid-count 0, non-nil-count 0, [v & more :as vs] vs]
-    (cond (not (seq vs)) (if (zero? non-nil-count) 0.0
-                             (float (/ valid-count non-nil-count)))
-          (nil? v)       (recur valid-count non-nil-count more)
-          :else          (let [valid? (and (string? v)
-                                           (u/is-url? v))]
-                           (recur (if valid? (inc valid-count) valid-count)
-                                  (inc non-nil-count)
-                                  more)))))
+(def Driver
+  "Schema for something that is a valid driver."
+  (s/pred (partial satisfies? IDriver) "valid driver"))
+
 
 (def IDriverDefaultsMixin
   "Default implementations of `IDriver` methods marked *OPTIONAL*."

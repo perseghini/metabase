@@ -83,10 +83,11 @@
 (s/defn ^:always-validate infer-special-types-by-name!
   [table :- TableInstance, fields :- [FieldInstance]]
   (doseq [field fields]
-    (when-let [inferred-special-type (infer-special-type-by-name (:name field) (:base_type field))]
-      (log/debug (format "Based on the name of %s %s, we're giving it a special type of %s."
-                         (sync-util/name-for-logging table)
-                         (sync-util/name-for-logging field)
-                         inferred-special-type))
-      (db/update! Field (u/get-id field)
-        :special_type inferred-special-type))))
+    (sync-util/with-error-handling (format "Error inferring special type by name for %s" (sync-util/name-for-logging field))
+      (when-let [inferred-special-type (infer-special-type-by-name (:name field) (:base_type field))]
+        (log/debug (format "Based on the name of %s %s, we're giving it a special type of %s."
+                           (sync-util/name-for-logging table)
+                           (sync-util/name-for-logging field)
+                           inferred-special-type))
+        (db/update! Field (u/get-id field)
+          :special_type inferred-special-type)))))

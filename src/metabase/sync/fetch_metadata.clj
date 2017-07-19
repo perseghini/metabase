@@ -2,14 +2,16 @@
   "Fetch metadata functions fetch 'snapshots' of the schema for a data warehouse database, including
    information about tables, schemas, and fields, and their types.
    For example, with SQL databases, these functions use the JDBC DatabaseMetaData to get this information."
-  (:require [metabase.models
+  (:require [metabase.driver :as driver]
+            [metabase.models
              database
              table]
             [metabase.util.schema :as su]
-            [schema.core :as s]
-            [metabase.driver :as driver])
+            [schema.core :as s])
   (:import metabase.models.database.DatabaseInstance
            metabase.models.table.TableInstance))
+
+;; TODO - should these be moved to an `interface` file?
 
 (def DatabaseMetadataTable
   "Schema for the expected output of `describe-database` for a Table."

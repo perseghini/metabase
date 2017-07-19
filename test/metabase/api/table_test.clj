@@ -162,7 +162,7 @@
                                                 :fk_target_field_id $
                                                 :raw_column_id      $
                                                 :last_analyzed      $
-                                                :values             venue-categories
+                                                :values             data/venue-categories
                                                 :dimensions         []}))])
             :rows         75
             :updated_at   $
@@ -516,15 +516,15 @@
   [{:table_id (data/id :venues)
     :id (data/id :venues :category_id)
     :name "CATEGORY_ID"
-    :values (map-indexed (fn [idx [category]] [idx category]) venue-categories)
+    :values (map-indexed (fn [idx [category]] [idx category]) data/venue-categories)
     :dimensions {:name "Foo", :field_id (data/id :venues :category_id), :human_readable_field_id nil, :type "internal"}}
    {:id (data/id :venues :price)
     :table_id (data/id :venues)
     :name "PRICE"
     :values [[1] [2] [3] [4]]
     :dimensions []}]
-  (with-data
-    (create-venue-category-remapping "Foo")
+  (data/with-data
+    (data/create-venue-category-remapping "Foo")
     (category-id-special-type
      :type/Category
      (fn []
@@ -537,15 +537,15 @@
   [{:table_id (data/id :venues)
     :id (data/id :venues :category_id)
     :name "CATEGORY_ID"
-    :values (map-indexed (fn [idx [category]] [idx category]) venue-categories)
+    :values (map-indexed (fn [idx [category]] [idx category]) data/venue-categories)
     :dimensions {:name "Foo", :field_id (data/id :venues :category_id), :human_readable_field_id nil, :type "internal"}}
    {:id (data/id :venues :price)
     :table_id (data/id :venues)
     :name "PRICE"
     :values [[1] [2] [3] [4]]
     :dimensions []}]
-  (with-data
-    (create-venue-category-remapping "Foo")
+  (data/with-data
+    (data/create-venue-category-remapping "Foo")
     (category-id-special-type
      :type/Enum
      (fn []
@@ -565,8 +565,8 @@
     :name "PRICE"
     :values [[1] [2] [3] [4]]
     :dimensions []}]
-  (with-data
-    (create-venue-category-fk-remapping "Foo")
+  (data/with-data
+    (data/create-venue-category-fk-remapping "Foo")
     (category-id-special-type
      :type/Category
      (fn []

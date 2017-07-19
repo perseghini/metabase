@@ -1,18 +1,17 @@
 (ns metabase.sync.util
   "Utility functions and macros to abstract away some common patterns and operations across the sync processes, such as logging start/end messages."
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.math.numeric-tower :as math]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [metabase
              [driver :as driver]
              [events :as events]
              [util :as u]]
             [metabase.models
-             database
-             field
+             [field :refer [Field]]
              [table :refer [Table]]]
             [metabase.query-processor.interface :as i]
-            [toucan.db :as db]
-            [clojure.math.numeric-tower :as math]
-            [clojure.string :as str])
+            [toucan.db :as db])
   (:import metabase.models.database.DatabaseInstance
            metabase.models.field.FieldInstance
            metabase.models.table.TableInstance))
@@ -175,9 +174,15 @@
 
 
 (defn db->sync-tables
-  "Return all the Tables that should go the sync processes for DATABASE-OR-ID."
+  "Return all the Tables that should go through the sync processes for DATABASE-OR-ID."
   [database-or-id]
   (db/select Table, :db_id (u/get-id database-or-id), :active true, :visibility_type nil))
+
+;; TODO - make sure the new sync code uses this.
+(defn table->sync-fields
+  "Return all the Fields that should go through the sync processes for TABLE-OR-ID."
+  [table-or-id]
+  (db/select Field :table_id (u/get-id table-or-id), :active true, :visibility_type "normal"))
 
 
 (defprotocol INameForLogging

@@ -6,6 +6,7 @@
              [util :as u]]
             [metabase.models.table :refer [Table]]
             [metabase.query-processor.middleware.expand :as ql]
+            [metabase.sync.interface :as si]
             [toucan.db :as db]))
 
 (defn- qp-query [db-id query]
@@ -35,7 +36,7 @@
   "Return the distinct values of FIELD.
    This is used to create a `FieldValues` object for `:type/Category` Fields."
   ([field]
-   (field-distinct-values field @(resolve 'metabase.sync.analyze.special-types/low-cardinality-threshold)))
+   (field-distinct-values field si/low-cardinality-threshold))
   ([field max-results]
    {:pre [(integer? max-results)]}
    (mapv first (field-query field (-> {}

@@ -1,138 +1,159 @@
 (ns metabase.sync.analyze.special-types.values
-  "Logic through inferring the special types of fields based on tests done against a sequence of their values."
+  "Logic for inferring (and setting) the special types of fields based on tests done against a sequence of their values.
+   Also sets `:preview_display` to `false` if a Field has on average very long text values."
   (:require [cheshire.core :as json]
-            [clojure.math.numeric-tower :as math]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [metabase
              [driver :as driver]
              [util :as u]]
+            [metabase.db.metadata-queries :as queries]
             [metabase.models.field :refer [Field]]
-            [metabase.sync.util :as sync-util]
+            [metabase.sync
+             [interface :as i]
+             [util :as sync-util]]
+            [metabase.util.schema :as su]
             [schema.core :as s]
             [toucan.db :as db])
   (:import metabase.models.field.FieldInstance
            metabase.models.table.TableInstance))
 
-(def ^:private ^:const ^Float percent-valid-url-threshold
-  "Fields that have at least this percent of values that are valid URLs should be given a special type of `:type/URL`."
-  0.95)
+(def ^:private Values
+  "Schema for the VALUES passed to each of the functions below. *Guaranteed* to be non-nil and non-empty."
+  ;; Validating against this is actually pretty quick, in the order of microseconds even for a 10,000 value sequence
+  (s/constrained [(s/pred (complement nil?))] seq "Non-empty sequence of non-nil values."))
+
+;;; ------------------------------------------------------------ No Preview Display ------------------------------------------------------------
 
 (def ^:private ^:const ^Integer average-length-no-preview-threshold
   "Fields whose values' average length is greater than this amount should be marked as `preview_display = false`."
   50)
 
+(s/defn ^:private ^:always-validate avg-length :- Double
+  [values :- Values]
+  (let [total-length (reduce + (for [value values]
+                                 (count (str value))))]
+    (/ (double total-length)
+       (double (count values)))))
 
-(defn- test:no-preview-display
+(s/defn ^:private ^:always-validate field-should-be-marked-no-preview-display? :- s/Bool
   "If FIELD's is textual and its average length is too great, mark it so it isn't displayed in the UI."
-  [driver field field-stats]
-  (if-not (and (= :normal (:visibility_type field))
-               (isa? (:base_type field) :type/Text))
-    ;; this field isn't suited for this test
-    field-stats
-    ;; test for avg length
-    (throw (UnsupportedOperationException.))
-    #_(let [avg-len (u/try-apply (:field-avg-length driver) field)]
-      (if-not (and avg-len (> avg-len average-length-no-preview-threshold))
-        field-stats
-        (do
-          (log/debug (u/format-color 'green "%s has an average length of %d. Not displaying it in previews." (sync-util/name-for-logging field) avg-len))
-          (assoc field-stats :preview-display false))))))
+  [field :- FieldInstance, values :- Values]
+  (boolean
+   (and (isa? (:base_type field) :type/Text)
+        (> (avg-length values) average-length-no-preview-threshold))))
 
-(defn- test:url-special-type
+
+;;; ------------------------------------------------------------ Predicate-based tests ------------------------------------------------------------
+
+(def ^:private ^:const ^Float percent-valid-threshold
+  "Fields that have at least this percent of values that are satisfy some predicate (such as `u/is-email?`)
+   should be given the corresponding special type (such as `:type/Email`)."
+  0.95)
+
+(s/defn ^:private ^:always-validate percent-satisfying-predicate :- Double
+  [pred :- (s/pred fn?), values :- Values]
+  (let [total-count    (count values)
+        pred           #(boolean (u/ignore-exceptions (pred %)))
+        matching-count (count (get (group-by pred values) true []))]
+    (/ (double matching-count)
+       (double total-count))))
+
+(s/defn ^:private ^:always-validate values-satisfy-predicate? :- s/Bool
+  "True if enough VALUES satisfy PREDICATE that the field they belong to should be given the corresponding special type."
+  [pred :- (s/pred fn?), values :- Values]
+  (>= (percent-satisfying-predicate pred values)
+      percent-valid-threshold))
+
+
+(s/defn ^:private ^:always-validate test:url-special-type :- (s/maybe :type/URL)
   "If FIELD is texual, doesn't have a `special_type`, and its non-nil values are primarily URLs, mark it as `special_type` `:type/URL`."
-  [driver field field-stats]
-  (if-not (and (not (:special_type field))
-               (isa? (:base_type field) :type/Text))
-    ;; this field isn't suited for this test
-    field-stats
-    ;; test for url values
-    (let [percent-urls 0] ; NOCOMMIT
-      (if-not (and (float? percent-urls)
-                   (>= percent-urls 0.0)
-                   (<= percent-urls 100.0)
-                   (> percent-urls percent-valid-url-threshold))
-        field-stats
-        (do
-          (log/debug (u/format-color 'green "%s is %d%% URLs. Marking it as a URL." (sync-util/name-for-logging field) (int (math/round (* 100 percent-urls)))))
-          (assoc field-stats :special-type :url))))))
+  [field :- FieldInstance, values :- Values]
+  (when (and (isa? (:base_type field) :type/Text)
+             (values-satisfy-predicate? u/is-url? values))
+    :type/URL))
 
-(defn- values-are-valid-json?
-  "`true` if at every item in VALUES is `nil` or a valid string-encoded JSON dictionary or array, and at least one of those is non-nil."
-  [values]
-  (u/ignore-exceptions
-    (loop [at-least-one-non-nil-value? false, [val & more] values]
-      (cond
-        (and (not val)
-             (not (seq more))) at-least-one-non-nil-value?
-        (str/blank? val)       (recur at-least-one-non-nil-value? more)
-        ;; If val is non-nil, check that it's a JSON dictionary or array. We don't want to mark Fields containing other
-        ;; types of valid JSON values as :json (e.g. a string representation of a number or boolean)
-        :else                  (do (u/prog1 (json/parse-string val)
-                                     (assert (or (map? <>)
-                                                 (sequential? <>))))
-                                   (recur true more))))))
 
-(defn- test:json-special-type
+(defn- valid-serialized-json? [x]
+  (and (json/parse-string x)
+       (or (map? x)
+           (sequential? x))))
+
+(s/defn ^:private ^:always-validate test:json-special-type :- (s/maybe :type/SerializedJSON)
   "Mark FIELD as `:json` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values
    are valid serialized JSON dictionaries or arrays."
-  [driver field field-stats]
-  (if (or (:special_type field)
-          (not (isa? (:base_type field) :type/Text)))
-    ;; this field isn't suited for this test
-    field-stats
-    ;; check for json values
-    (if-not (values-are-valid-json? (take driver/max-sync-lazy-seq-results (driver/field-values-lazy-seq driver field)))
-      field-stats
-      (do
-        (log/debug (u/format-color 'green "%s looks like it contains valid JSON objects. Setting special_type to :type/SerializedJSON." (sync-util/name-for-logging field)))
-        (assoc field-stats :special-type :type/SerializedJSON, :preview-display false)))))
+  [field :- FieldInstance, values :- Values]
+  (when (and (isa? (:base_type field) :type/Text)
+             (values-satisfy-predicate? valid-serialized-json? values))
+    :type/SerializedJSON))
 
-(defn- values-are-valid-emails?
-  "`true` if at every item in VALUES is `nil` or a valid email, and at least one of those is non-nil."
-  [values]
-  (u/ignore-exceptions
-    (loop [at-least-one-non-nil-value? false, [val & more] values]
-      (cond
-        (and (not val)
-             (not (seq more))) at-least-one-non-nil-value?
-        (str/blank? val)       (recur at-least-one-non-nil-value? more)
-        ;; If val is non-nil, check that it's a JSON dictionary or array. We don't want to mark Fields containing other
-        ;; types of valid JSON values as :json (e.g. a string representation of a number or boolean)
-        :else                  (do (assert (u/is-email? val))
-                                   (recur true more))))))
 
-(defn- test:email-special-type
+(s/defn ^:private ^:always-validate test:email-special-type :- (s/maybe :type/Email)
   "Mark FIELD as `:email` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values
    are valid emails."
-  [driver field field-stats]
-  (if (or (:special_type field)
-          (not (isa? (:base_type field) :type/Text)))
-    ;; this field isn't suited for this test
-    field-stats
-    ;; check for emails
-    (if-not (values-are-valid-emails? (take driver/max-sync-lazy-seq-results (driver/field-values-lazy-seq driver field)))
-      field-stats
-      (do
-        (log/debug (u/format-color 'green "%s looks like it contains valid email addresses. Setting special_type to :type/Email." (sync-util/name-for-logging field)))
-        (assoc field-stats :special-type :type/Email, :preview-display true)))))
+  [field :- FieldInstance, values :- Values]
+  (when (and (isa? (:base_type field) :type/Text)
+             (values-satisfy-predicate? u/is-email? values))
+    :type/Email))
 
-(defn- test:new-field
-  "Do the various tests that should only be done for a new `Field`.
-   We only run most of the field analysis work when the field is NEW in order to favor performance of the sync process."
-  [driver field field-stats]
-  (->> field-stats
-       (test:no-preview-display driver field)
-       (test:url-special-type   driver field)
-       (test:json-special-type  driver field)
-       (test:email-special-type driver field)))
 
-(defn- infer-special-type-by-values [& _]
-  (throw (UnsupportedOperationException.)))
+;;; ------------------------------------------------------------ Category ------------------------------------------------------------
+
+(s/defn ^:private ^:always-validate test:category :- (s/maybe :type/Category)
+  [field :- FieldInstance, _]
+  (let [distinct-count (queries/field-distinct-count field i/low-cardinality-threshold)]
+    (when (< distinct-count i/low-cardinality-threshold)
+      (log/debug (format "%s has %d distinct values. Since that is less than %d, we're marking it as a category."))
+      :type/Category)))
+
+
+;;; ------------------------------------------------------------ Putting it all together ------------------------------------------------------------
+
+(def ^:private test-fns
+  "Various test functions, in the order the 'tests' against values should be ran.
+   Each test function take two args, `field` and `values."
+  [test:url-special-type
+   test:json-special-type
+   test:email-special-type
+   test:category])
+
+(s/defn ^:private ^:always-validate infer-special-type :- (s/maybe su/FieldType)
+  [field :- FieldInstance, values :- Values]
+  (some #(sync-util/with-error-handling (format "Check if values of %s match special-type" (sync-util/name-for-logging field))
+           (u/prog1 (% field values)
+             (when <>
+               (log/debug (format "Based on the values of %s, we're marking it as %s." (sync-util/name-for-logging field) <>)))))
+        test-fns))
+
+
+(s/defn ^:private ^:always-validate field-values :- (s/maybe Values)
+  "Procure a sequence of non-nil values, up to `max-sync-lazy-seq-results` (10,000 at the time of this writing), for use
+   in the various tests above."
+  [driver :- driver/Driver, field :- FieldInstance]
+  (->> (driver/field-values-lazy-seq driver field)
+       (take driver/max-sync-lazy-seq-results)
+       (filter (complement nil?))
+       seq))
+
+
+(s/defn ^:private ^:always-validate infer-special-types-for-field!
+  "Attempt to determine a valid special type for FIELD."
+  [driver :- driver/Driver, field :- FieldInstance]
+  (when-let [values (field-values driver field)]
+    (if (sync-util/with-error-handling (format "Check if %s should be marked no preview display" (sync-util/name-for-logging field))
+          (field-should-be-marked-no-preview-display? field values))
+      ;; if field's values are too long on average, mark it 'no preview display' so it doesn't show up in results
+      (db/update! Field (u/get-id field)
+        :preview_display false)
+      ;; otherwise if it's *not* no preview display, run the normal series of tests and see if it can have a nice special type
+      (when-let [inferred-special-type (infer-special-type field values)]
+        (db/update! Field (u/get-id field)
+          :special_type inferred-special-type)))))
+
 
 (s/defn ^:always-validate infer-special-types-by-value!
+  "Infer (and set) the special types of all te FIELDS belonging to TABLE by looking at their values."
   [table :- TableInstance, fields :- [FieldInstance]]
-  (doseq [field fields]
-    (when-let [inferred-special-type (infer-special-type-by-values)]
-      (db/update! Field (u/get-id field)
-        :special_type inferred-special-type))))
+  (let [driver (driver/->driver (:db_id table))]
+    (doseq [field fields]
+      (sync-util/with-error-handling (format "Error inferring special type by values for %s" (sync-util/name-for-logging field))
+        (infer-special-types-for-field! driver field)))))
