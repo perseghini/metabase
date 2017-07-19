@@ -8,7 +8,7 @@
             [metabase.models
              [field :refer [Field]]
              [table :as table :refer [Table]]]
-            [metabase.sync.analyze.special-types :as special-types]
+            [metabase.sync.analyze.special-types.values :as values]
             [metabase.test
              [data :as data]
              [util :as tu]]
@@ -29,7 +29,7 @@
    :special-type :type/Category}
   (throw (UnsupportedOperationException.))
   #_(with-redefs-fn {#'metadata-queries/field-distinct-values (constantly [1 2 3 4])}
-      #(#'special-types/test:cardinality-and-extract-field-values {} {})))
+      #(#'values/test:cardinality-and-extract-field-values {} {})))
 
 
 ;;; ## mark-json-field!
@@ -39,48 +39,48 @@
 
 ;; When all the values are valid JSON dicts they're valid JSON
 (expect
-  (#'special-types/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
-                                           "{\"this\":\"is\",\"valid\":\"json\"}"
-                                           "{\"this\":\"is\",\"valid\":\"json\"}"]))
+  (#'values/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
+                                    "{\"this\":\"is\",\"valid\":\"json\"}"
+                                    "{\"this\":\"is\",\"valid\":\"json\"}"]))
 
 ;; When all the values are valid JSON arrays they're valid JSON
 (expect
-  (#'special-types/values-are-valid-json? ["[1, 2, 3, 4]"
-                                           "[1, 2, 3, 4]"
-                                           "[1, 2, 3, 4]"]))
+  (#'values/values-are-valid-json? ["[1, 2, 3, 4]"
+                                    "[1, 2, 3, 4]"
+                                    "[1, 2, 3, 4]"]))
 
 ;; Some combo of both can still be marked as JSON
 (expect
-  (#'special-types/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
-                                           "[1, 2, 3, 4]"
-                                           "[1, 2, 3, 4]"]))
+  (#'values/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
+                                    "[1, 2, 3, 4]"
+                                    "[1, 2, 3, 4]"]))
 
 ;; If the values have some valid JSON dicts but is mostly null, it's still valid JSON
 (expect
-  (#'special-types/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
-                                           nil
-                                           nil]))
+  (#'values/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
+                                    nil
+                                    nil]))
 
 ;; If every value is nil then the values should not be considered valid JSON
 (expect false
-        (#'special-types/values-are-valid-json? [nil nil nil]))
+        (#'values/values-are-valid-json? [nil nil nil]))
 
 ;; Check that things that aren't dictionaries or arrays aren't marked as JSON
-(expect false (#'special-types/values-are-valid-json? ["\"A JSON string should not cause a Field to be marked as JSON\""]))
-(expect false (#'special-types/values-are-valid-json? ["100"]))
-(expect false (#'special-types/values-are-valid-json? ["true"]))
-(expect false (#'special-types/values-are-valid-json? ["false"]))
+(expect false (#'values/values-are-valid-json? ["\"A JSON string should not cause a Field to be marked as JSON\""]))
+(expect false (#'values/values-are-valid-json? ["100"]))
+(expect false (#'values/values-are-valid-json? ["true"]))
+(expect false (#'values/values-are-valid-json? ["false"]))
 
 ;; Check that things that are valid emails are marked as Emails
-(expect true (#'special-types/values-are-valid-emails? ["helper@metabase.com"]))
-(expect true (#'special-types/values-are-valid-emails? ["helper@metabase.com", "someone@here.com", "help@nope.com"]))
-(expect true (#'special-types/values-are-valid-emails? ["helper@metabase.com", nil, "help@nope.com"]))
+(expect true (#'values/values-are-valid-emails? ["helper@metabase.com"]))
+(expect true (#'values/values-are-valid-emails? ["helper@metabase.com", "someone@here.com", "help@nope.com"]))
+(expect true (#'values/values-are-valid-emails? ["helper@metabase.com", nil, "help@nope.com"]))
 
-(expect false (#'special-types/values-are-valid-emails? ["helper@metabase.com", "1111IsNot!An....email", "help@nope.com"]))
-(expect false (#'special-types/values-are-valid-emails? ["\"A string should not cause a Field to be marked as email\""]))
-(expect false (#'special-types/values-are-valid-emails? [100]))
-(expect false (#'special-types/values-are-valid-emails? ["true"]))
-(expect false (#'special-types/values-are-valid-emails? ["false"]))
+(expect false (#'values/values-are-valid-emails? ["helper@metabase.com", "1111IsNot!An....email", "help@nope.com"]))
+(expect false (#'values/values-are-valid-emails? ["\"A string should not cause a Field to be marked as email\""]))
+(expect false (#'values/values-are-valid-emails? [100]))
+(expect false (#'values/values-are-valid-emails? ["true"]))
+(expect false (#'values/values-are-valid-emails? ["false"]))
 
 ;; Tests to avoid analyzing hidden tables
 (defn- unanalyzed-fields-count [table]

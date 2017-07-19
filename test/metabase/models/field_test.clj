@@ -1,7 +1,8 @@
 (ns metabase.models.field-test
   (:require [expectations :refer :all]
             [metabase.models.field-values :refer :all]
-            [metabase.sync.analyze.special-types :as special-types]))
+            [metabase.sync.analyze.special-types :as special-types]
+            [metabase.sync.analyze.special-types.name :as name]))
 
 ;; field-should-have-field-values?
 
@@ -70,12 +71,10 @@
 
 ;;; infer-field-special-type
 
-(expect nil            (#'special-types/infer-field-special-type nil       nil))
-(expect nil            (#'special-types/infer-field-special-type "id"      nil))
-(expect nil            (#'special-types/infer-field-special-type nil       :type/Integer))
-(expect :type/PK       (#'special-types/infer-field-special-type "id"      :type/Integer))
+(expect nil            (#'name/infer-special-type-by-name "id"      nil))
+(expect :type/PK       (#'name/infer-special-type-by-name "id"      :type/Integer))
 ;; other pattern matches based on type/regex (remember, base_type matters in matching!)
-(expect :type/Category (#'special-types/infer-field-special-type "rating"  :type/Integer))
-(expect nil            (#'special-types/infer-field-special-type "rating"  :type/Boolean))
-(expect :type/Country  (#'special-types/infer-field-special-type "country" :type/Text))
-(expect nil            (#'special-types/infer-field-special-type "country" :type/Integer))
+(expect :type/Category (#'name/infer-special-type-by-name "rating"  :type/Integer))
+(expect nil            (#'name/infer-special-type-by-name "rating"  :type/Boolean))
+(expect :type/Country  (#'name/infer-special-type-by-name "country" :type/Text))
+(expect nil            (#'name/infer-special-type-by-name "country" :type/Integer))
