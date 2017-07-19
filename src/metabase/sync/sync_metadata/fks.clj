@@ -1,36 +1,56 @@
 (ns metabase.sync.sync-metadata.fks
-  "Logic for updating FK properties of Fieldsfrom metadata fetched from a physical DB."
-  (:require [metabase.models
-             database
-             table]
+  "Logic for updating FK properties of Fields from metadata fetched from a physical DB."
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
+            [metabase.models
+             [field :refer [Field]]
+             [table :refer [Table]]]
             [metabase.sync
-             [fetch-metadata :as fetch-metadata]
+             [fetch-metadata :as fetch-metadata :refer [FKMetadataEntry]]
              [util :as sync-util]]
-            [schema.core :as s])
-  (:import metabase.models.table.TableInstance
-           metabase.models.database.DatabaseInstance))
+            [metabase.util :as u]
+            [schema.core :as s]
+            [toucan.db :as db])
+  (:import metabase.models.database.DatabaseInstance
+           metabase.models.table.TableInstance))
 
-#_(log/debug (u/format-color 'cyan "Marking foreign key '%s.%s' -> '%s.%s'." (table-name-for-logging table) fk-column-name (table-name-for-logging dest-table) dest-column-name))
+(s/defn ^:private ^:always-validate mark-fk!
+  [database :- DatabaseInstance, table :- TableInstance, fk :- FKMetadataEntry]
+  (let [source-field (db/select-one Field
+                       :table_id           (u/get-id table)
+                       :%lower.name        (str/lower-case (:fk-column-name fk))
+                       :fk_target_field_id nil
+                       :active             true
+                       :visibility_type    [:not= "retired"])
+        dest-table   (when source-field
+                       (db/select-one Table
+                         :db_id           (u/get-id database)
+                         :%lower.name     (str/lower-case (-> fk :dest-table :name))
+                         :%lower.schema   (when-let [schema (-> fk :dest-table :schema)]
+                                            (str/lower-case schema))
+                         :active          true
+                         :visibility_type nil))
+        dest-field   (when dest-table
+                       (db/select-one Field
+                         :table_id           (u/get-id dest-table)
+                         :%lower.name        (str/lower-case (:dest-column-name fk))
+                         :active             true
+                         :visibility_type    [:not= "retired"]))]
+    (when (and source-field dest-table dest-field)
+      (log/debug (u/format-color 'cyan "Marking foreign key from %s %s -> %s %s"
+                   (sync-util/name-for-logging table)
+                   (sync-util/name-for-logging source-field)
+                   (sync-util/name-for-logging dest-table)
+                   (sync-util/name-for-logging dest-field)))
+      (db/update! Field (u/get-id source-field)
+        :special_type       :type/FK
+        :fk_target_field_id (u/get-id dest-field)))))
 
-#_(defn- save-fks!
-  "Update all of the FK relationships present in DATABASE based on what's captured in the raw schema.
-   This will set :special_type :type/FK and :fk_target_field_id <field-id> for each found FK relationship.
-   NOTE: we currently overwrite any previously defined metadata when doing this."
-  [fk-sources]
-  {:pre [(coll? fk-sources)
-         (every? map? fk-sources)]}
-  (doseq [{fk-source-id :source-column, fk-target-id :target-column} fk-sources]
-    ;; TODO: eventually limit this to just "core" schema tables
-    (when-let [source-field-id (db/select-one-id Field, :raw_column_id fk-source-id, :visibility_type [:not= "retired"])]
-      (when-let [target-field-id (db/select-one-id Field, :raw_column_id fk-target-id, :visibility_type [:not= "retired"])]
-        (db/update! Field source-field-id
-          :special_type       :type/FK
-          :fk_target_field_id target-field-id)))))
 
 (s/defn ^:private ^:always-validate sync-fks-for-table!
   [database :- DatabaseInstance, table :- TableInstance]
-  (let [metadata (fetch-metadata/fk-metadata database table)]
-    (throw (UnsupportedOperationException.))))
+  (doseq [fk (fetch-metadata/fk-metadata database table)]
+    (mark-fk! database table fk)))
 
 (s/defn ^:always-validate sync-fks!
   [database :- DatabaseInstance]

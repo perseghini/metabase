@@ -36,13 +36,15 @@
    :schema (s/maybe su/NonBlankString)
    :fields #{TableMetadataField}})
 
+(def FKMetadataEntry
+  {:fk-column-name   su/NonBlankString
+   :dest-table       {:name   su/NonBlankString
+                      :schema (s/maybe su/NonBlankString)}
+   :dest-column-name su/NonBlankString})
 
 (def FKMetadata
   "Schema for the expected output of `describe-table-fks`."
-  (s/maybe #{{:fk-column-name   su/NonBlankString
-              :dest-table       {:name   su/NonBlankString
-                                 :schema (s/maybe su/NonBlankString)}
-              :dest-column-name su/NonBlankString}}))
+  (s/maybe #{FKMetadataEntry}))
 
 
 (s/defn ^:always-validate db-metadata :- DatabaseMetadata
