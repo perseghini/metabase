@@ -36,9 +36,7 @@
          (catch Throwable e
            (log/error "Error fetching table row count:"
                       (u/pprint-to-str results))
-           (throw e))))
-  (->
-   first first long))
+           (throw e)))))
 
 (defn field-distinct-values
   "Return the distinct values of FIELD.
