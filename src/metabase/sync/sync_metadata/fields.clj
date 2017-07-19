@@ -59,7 +59,7 @@
 
 (s/defn ^:private ^:always-validate create-or-reactivate-fields!
   [table :- TableInstance, new-fields :- #{TableMetadataField}]
-  (log/info "Found new fields:"
+  (log/info (format "Found new fields for %s:" (sync-util/name-for-logging table))
             (for [field new-fields]
               (sync-util/name-for-logging (field/map->FieldInstance field))))
   (doseq [{field-name :name, :keys [base-type special-type pk? parent-id raw-column-id]} new-fields]
@@ -80,7 +80,7 @@
 
 (s/defn ^:private ^:always-validate retire-fields!
   [table :- TableInstance, old-fields :- #{TableMetadataField}]
-  (log/info "Marking fields as inactive:"
+  (log/info (format "Marking fields for %s as inactive:" (sync-util/name-for-logging table))
             (for [field old-fields]
               (sync-util/name-for-logging (field/map->FieldInstance field))))
   (doseq [field old-fields]

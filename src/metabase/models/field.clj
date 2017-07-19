@@ -44,6 +44,10 @@
     (merge defaults field)))
 
 (defn- pre-update [field]
+  (when (and (contains? field :special_type)
+             (nil? (:special_type field)))
+    (println "setting special type to nil:" (db/select-one-field :name Field :id (u/get-id field)) field) ; NOCOMMIT
+    )
   (u/prog1 field
     (check-valid-types field)))
 

@@ -24,8 +24,6 @@
   ([database]
    (sync-database! database {:full-sync? true}))
   ([database :- DatabaseInstance, options :- SyncDatabaseOptions]
-   (println "options:" options) ; NOCOMMIT
-   (println "(:full-sync? options):" (:full-sync? options)) ; NOCOMMIT
    ;; First make sure Tables, Fields, and FK information is up-to-date
    (sync-metadata/sync-db-metadata! database)
    (when (:full-sync? options)

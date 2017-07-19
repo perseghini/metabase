@@ -98,12 +98,19 @@
   [operation database-or-id & body]
   `(do-with-duplicate-ops-prevented ~operation ~database-or-id (fn [] ~@body)))
 
-(defn do-with-error-handling [f]
-  (try (f)
-       (catch Throwable e
-         (log/error (u/format-color 'red "Error running sync step: %s\n%s"
-                      (or (.getMessage e) (class e))
-                      (u/pprint-to-str (u/filtered-stacktrace e)))))))
+(defn do-with-error-handling
+  ([f]
+   (do-with-error-handling "Error running sync step" f))
+  ([message f]
+   (try (f)
+        (catch Throwable e
+          (log/error (u/format-color 'red "%s: %s\n%s"
+                       message
+                       (or (.getMessage e) (class e))
+                       (u/pprint-to-str (u/filtered-stacktrace e))))))))
+
+(defmacro with-error-handling {:style/indent 1} [message & body]
+  `(do-with-error-handling ~message (fn [] ~@body)))
 
 (defmacro sync-in-context {:style/indent 1} [database & body]
   `(driver/sync-in-context (driver/->driver ~database) ~database

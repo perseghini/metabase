@@ -14,15 +14,13 @@
 (s/defn ^:private ^:always-validate table-row-count :- (s/maybe s/Int)
   "Determine the count of rows in TABLE by running a simple structured MBQL query."
   [table :- TableInstance]
-  (try
-    (queries/table-row-count table)
-    (catch Throwable e
-      (log/warn (u/format-color 'red "Unable to determine row count for '%s': %s\n%s" (:name table) (.getMessage e) (u/pprint-to-str (u/filtered-stacktrace e)))))))
+  (sync-util/with-error-handling (format "Unable to determine row count for %s" (sync-util/name-for-logging table))
+    (queries/table-row-count table)))
 
 (s/defn ^:private ^:always-validate update-row-count-for-table!
   [table :- TableInstance]
   (when-let [row-count (table-row-count table)]
-    (log/debug (format "Set table row count for '%s' to %d" (:name table) row-count))
+    (log/debug (format "Set table row count for %s to %d" (sync-util/name-for-logging table) row-count))
     (db/update! Table (u/get-id table)
       :rows row-count)))
 

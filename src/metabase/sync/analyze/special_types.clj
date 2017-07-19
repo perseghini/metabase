@@ -51,5 +51,6 @@
   (let [tables (sync-util/db->sync-tables database)]
     (sync-util/with-emoji-progress-bar [emoji-progress-bar (count tables)]
       (doseq [table tables]
-        (infer-special-types-for-table! table)
+        (sync-util/with-error-handling (format "Error inferring special types for %s" (sync-util/name-for-logging table))
+          (infer-special-types-for-table! table))
         (log/info (u/format-color 'blue "%s Analyzed %s" (emoji-progress-bar) (sync-util/name-for-logging table)))))))

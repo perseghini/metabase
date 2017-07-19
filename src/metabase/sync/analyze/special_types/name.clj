@@ -9,7 +9,8 @@
             [metabase.util.schema :as su]
             [schema.core :as s]
             [toucan.db :as db]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [metabase.sync.util :as sync-util])
   (:import metabase.models.field.FieldInstance
            metabase.models.table.TableInstance))
 
@@ -76,7 +77,6 @@
       (some (fn [[name-pattern valid-base-types special-type]]
               (when (and (some (partial isa? base-type) valid-base-types)
                          (re-matches name-pattern (str/lower-case field-name)))
-                (log/debug (format "Field '%s' (%s) matches pattern '%s', so giving it a special type of %s." field-name base-type name-pattern special-type))
                 special-type))
             pattern+base-types+special-type)))
 
@@ -84,5 +84,9 @@
   [table :- TableInstance, fields :- [FieldInstance]]
   (doseq [field fields]
     (when-let [inferred-special-type (infer-special-type-by-name (:name field) (:base_type field))]
+      (log/debug (format "Based on the name of %s %s, we're giving it a special type of %s."
+                         (sync-util/name-for-logging table)
+                         (sync-util/name-for-logging field)
+                         inferred-special-type))
       (db/update! Field (u/get-id field)
         :special_type inferred-special-type))))
