@@ -13,9 +13,7 @@
              [util :as sync-util]]
             [metabase.util.schema :as su]
             [schema.core :as s]
-            [toucan.db :as db])
-  (:import metabase.models.field.FieldInstance
-           metabase.models.table.TableInstance))
+            [toucan.db :as db]))
 
 (def ^:private Values
   "Schema for the VALUES passed to each of the functions below. *Guaranteed* to be non-nil and non-empty."
@@ -37,7 +35,7 @@
 
 (s/defn ^:private ^:always-validate field-should-be-marked-no-preview-display? :- s/Bool
   "If FIELD's is textual and its average length is too great, mark it so it isn't displayed in the UI."
-  [field :- FieldInstance, values :- Values]
+  [field :- i/FieldInstance, values :- Values]
   (boolean
    (and (isa? (:base_type field) :type/Text)
         (> (avg-length values) average-length-no-preview-threshold))))
@@ -65,9 +63,9 @@
       percent-valid-threshold))
 
 
-(s/defn ^:private ^:always-validate test:url-special-type :- (s/maybe :type/URL)
+(s/defn ^:private ^:always-validate test:url :- (s/maybe (s/eq :type/URL))
   "If FIELD is texual, doesn't have a `special_type`, and its non-nil values are primarily URLs, mark it as `special_type` `:type/URL`."
-  [field :- FieldInstance, values :- Values]
+  [field :- i/FieldInstance, values :- Values]
   (when (and (isa? (:base_type field) :type/Text)
              (values-satisfy-predicate? u/is-url? values))
     :type/URL))
@@ -78,19 +76,19 @@
        (or (map? x)
            (sequential? x))))
 
-(s/defn ^:private ^:always-validate test:json-special-type :- (s/maybe :type/SerializedJSON)
+(s/defn ^:private ^:always-validate test:json :- (s/maybe (s/eq :type/SerializedJSON))
   "Mark FIELD as `:json` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values
    are valid serialized JSON dictionaries or arrays."
-  [field :- FieldInstance, values :- Values]
+  [field :- i/FieldInstance, values :- Values]
   (when (and (isa? (:base_type field) :type/Text)
              (values-satisfy-predicate? valid-serialized-json? values))
     :type/SerializedJSON))
 
 
-(s/defn ^:private ^:always-validate test:email-special-type :- (s/maybe :type/Email)
+(s/defn ^:private ^:always-validate test:email :- (s/maybe (s/eq :type/Email))
   "Mark FIELD as `:email` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values
    are valid emails."
-  [field :- FieldInstance, values :- Values]
+  [field :- i/FieldInstance, values :- Values]
   (when (and (isa? (:base_type field) :type/Text)
              (values-satisfy-predicate? u/is-email? values))
     :type/Email))
@@ -98,11 +96,14 @@
 
 ;;; ------------------------------------------------------------ Category ------------------------------------------------------------
 
-(s/defn ^:private ^:always-validate test:category :- (s/maybe :type/Category)
-  [field :- FieldInstance, _]
+(s/defn ^:private ^:always-validate test:category :- (s/maybe (s/eq :type/Category))
+  [field :- i/FieldInstance, _]
   (let [distinct-count (queries/field-distinct-count field i/low-cardinality-threshold)]
     (when (< distinct-count i/low-cardinality-threshold)
-      (log/debug (format "%s has %d distinct values. Since that is less than %d, we're marking it as a category."))
+      (log/debug (format "%s has %d distinct values. Since that is less than %d, we're marking it as a category."
+                         (sync-util/name-for-logging field)
+                         distinct-count
+                         i/low-cardinality-threshold))
       :type/Category)))
 
 
@@ -111,14 +112,14 @@
 (def ^:private test-fns
   "Various test functions, in the order the 'tests' against values should be ran.
    Each test function take two args, `field` and `values."
-  [test:url-special-type
-   test:json-special-type
-   test:email-special-type
+  [test:url
+   test:json
+   test:email
    test:category])
 
 (s/defn ^:private ^:always-validate infer-special-type :- (s/maybe su/FieldType)
-  [field :- FieldInstance, values :- Values]
-  (some #(sync-util/with-error-handling (format "Check if values of %s match special-type" (sync-util/name-for-logging field))
+  [field :- i/FieldInstance, values :- Values]
+  (some #(sync-util/with-error-handling (format "Error checking if values of %s match special-type" (sync-util/name-for-logging field))
            (u/prog1 (% field values)
              (when <>
                (log/debug (format "Based on the values of %s, we're marking it as %s." (sync-util/name-for-logging field) <>)))))
@@ -128,7 +129,7 @@
 (s/defn ^:private ^:always-validate field-values :- (s/maybe Values)
   "Procure a sequence of non-nil values, up to `max-sync-lazy-seq-results` (10,000 at the time of this writing), for use
    in the various tests above."
-  [driver :- driver/Driver, field :- FieldInstance]
+  [driver, field :- i/FieldInstance]
   (->> (driver/field-values-lazy-seq driver field)
        (take driver/max-sync-lazy-seq-results)
        (filter (complement nil?))
@@ -137,9 +138,9 @@
 
 (s/defn ^:private ^:always-validate infer-special-types-for-field!
   "Attempt to determine a valid special type for FIELD."
-  [driver :- driver/Driver, field :- FieldInstance]
+  [driver, field :- i/FieldInstance]
   (when-let [values (field-values driver field)]
-    (if (sync-util/with-error-handling (format "Check if %s should be marked no preview display" (sync-util/name-for-logging field))
+    (if (sync-util/with-error-handling (format "Error checking if %s should be marked no preview display" (sync-util/name-for-logging field))
           (field-should-be-marked-no-preview-display? field values))
       ;; if field's values are too long on average, mark it 'no preview display' so it doesn't show up in results
       (db/update! Field (u/get-id field)
@@ -152,7 +153,7 @@
 
 (s/defn ^:always-validate infer-special-types-by-value!
   "Infer (and set) the special types of all te FIELDS belonging to TABLE by looking at their values."
-  [table :- TableInstance, fields :- [FieldInstance]]
+  [table :- i/TableInstance, fields :- [i/FieldInstance]]
   (let [driver (driver/->driver (:db_id table))]
     (doseq [field fields]
       (sync-util/with-error-handling (format "Error inferring special type by values for %s" (sync-util/name-for-logging field))

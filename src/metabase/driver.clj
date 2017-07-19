@@ -199,11 +199,6 @@
      There is no expectation that the results be returned in any given order."))
 
 
-(def Driver
-  "Schema for something that is a valid driver."
-  (s/pred (partial satisfies? IDriver) "valid driver"))
-
-
 (def IDriverDefaultsMixin
   "Default implementations of `IDriver` methods marked *OPTIONAL*."
   {:date-interval                     (u/drop-first-arg u/relative-date)

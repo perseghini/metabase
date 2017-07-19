@@ -1,18 +1,17 @@
 (ns metabase.sync.analyze.special-types.name
   "Logic for inferring the special types of Fields based on their name."
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [metabase
              [config :as config]
-             types
              [util :as u]]
             [metabase.models.field :refer [Field]]
+            [metabase.sync
+             [interface :as i]
+             [util :as sync-util]]
             [metabase.util.schema :as su]
             [schema.core :as s]
-            [toucan.db :as db]
-            [clojure.tools.logging :as log]
-            [metabase.sync.util :as sync-util])
-  (:import metabase.models.field.FieldInstance
-           metabase.models.table.TableInstance))
+            [toucan.db :as db]))
 
 (def ^:private bool-or-int-type #{:type/Boolean :type/Integer})
 (def ^:private float-type       #{:type/Float})
@@ -81,7 +80,7 @@
             pattern+base-types+special-type)))
 
 (s/defn ^:always-validate infer-special-types-by-name!
-  [table :- TableInstance, fields :- [FieldInstance]]
+  [table :- i/TableInstance, fields :- [i/FieldInstance]]
   (doseq [field fields]
     (sync-util/with-error-handling (format "Error inferring special type by name for %s" (sync-util/name-for-logging field))
       (when-let [inferred-special-type (infer-special-type-by-name (:name field) (:base_type field))]

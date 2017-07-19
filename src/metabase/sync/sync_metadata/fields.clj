@@ -1,22 +1,17 @@
 (ns metabase.sync.sync-metadata.fields
   "Logic for updating Metabase Field models from metadata fetched from a physical DB."
-  (:require [clojure
-             [data :as data]
-             [set :as set]]
+  (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [metabase.models
-             [field :refer [Field] :as field]
+             [field :as field :refer [Field]]
              [humanization :as humanization]]
             [metabase.sync
-             [fetch-metadata :as fetch-metadata :refer [TableMetadataField]]
+             [fetch-metadata :as fetch-metadata]
+             [interface :as i]
              [util :as sync-util]]
             [metabase.util :as u]
             [schema.core :as s]
-            [toucan.db :as db]
-            [metabase.util.schema :as su]
-            [clojure.string :as str])
-  (:import metabase.models.database.DatabaseInstance
-           metabase.models.table.TableInstance))
+            [toucan.db :as db]))
 
 #_(defn- update-field-from-field-def!
   "Update an EXISTING-FIELD from the given FIELD-DEF."
@@ -58,7 +53,7 @@
 
 
 (s/defn ^:private ^:always-validate create-or-reactivate-fields!
-  [table :- TableInstance, new-fields :- #{TableMetadataField}]
+  [table :- i/TableInstance, new-fields :- #{i/TableMetadataField}]
   (log/info (format "Found new fields for %s:" (sync-util/name-for-logging table))
             (for [field new-fields]
               (sync-util/name-for-logging (field/map->FieldInstance field))))
@@ -79,7 +74,7 @@
 
 
 (s/defn ^:private ^:always-validate retire-fields!
-  [table :- TableInstance, old-fields :- #{TableMetadataField}]
+  [table :- i/TableInstance, old-fields :- #{i/TableMetadataField}]
   (log/info (format "Marking fields for %s as inactive:" (sync-util/name-for-logging table))
             (for [field old-fields]
               (sync-util/name-for-logging (field/map->FieldInstance field))))
@@ -92,7 +87,7 @@
 
 (s/defn ^:private ^:always-validate update-metadata!
   "Make sure things like PK status and base-type are in sync with what has come back from the DB."
-  [table :- TableInstance, fields :- #{TableMetadataField}]
+  [table :- i/TableInstance, fields :- #{i/TableMetadataField}]
   (let [existing-fields      (db/select [Field :base_type :special_type :name :id]
                                :table_id (u/get-id table)
                                :active   true)
@@ -107,12 +102,12 @@
                                       (when (:pk? metadata) :type/PK))})))))))
 
 
-(s/defn ^:private ^:always-validate db-metadata :- #{TableMetadataField}
-  [database :- DatabaseInstance, table :- TableInstance]
+(s/defn ^:private ^:always-validate db-metadata :- #{i/TableMetadataField}
+  [database :- i/DatabaseInstance, table :- i/TableInstance]
   (:fields (fetch-metadata/table-metadata database table)))
 
-(s/defn ^:private ^:always-validate our-metadata :- #{TableMetadataField}
-  [table :- TableInstance]
+(s/defn ^:private ^:always-validate our-metadata :- #{i/TableMetadataField}
+  [table :- i/TableInstance]
   (set (for [field (db/select [Field :name :base_type :special_type]
                      :table_id (u/get-id table)
                      :parent_id nil
@@ -123,9 +118,9 @@
           :pk?          (isa? (:special_type field) :type/PK)})))
 
 
-(s/defn ^:private ^:always-validate diff-fields :- #{TableMetadataField}
+(s/defn ^:private ^:always-validate diff-fields :- #{i/TableMetadataField}
   "Return the set of Fields (based on case-insensitive name) that are only in A and not in B."
-  [a :- #{TableMetadataField}, b :- #{TableMetadataField}]
+  [a :- #{i/TableMetadataField}, b :- #{i/TableMetadataField}]
   (let [field-names-in-b (set (map (comp str/lower-case :name)
                                    b))]
     (set (for [field a
@@ -134,7 +129,7 @@
 
 
 (s/defn ^:private ^:always-validate sync-fields-for-table!
-  [database :- DatabaseInstance, table :- TableInstance]
+  [database :- i/DatabaseInstance, table :- i/TableInstance]
   (let [db-metadata  (db-metadata database table)
         our-metadata (our-metadata table)
         new-fields   (diff-fields db-metadata our-metadata)
@@ -150,6 +145,7 @@
 
 
 (s/defn ^:always-validate sync-fields!
-  [database :- DatabaseInstance]
+  [database :- i/DatabaseInstance]
   (doseq [table (sync-util/db->sync-tables database)]
-    (sync-fields-for-table! database table)))
+    (sync-util/with-error-handling (format "Error syncing fields for %s" (sync-util/name-for-logging table))
+      (sync-fields-for-table! database table))))

@@ -7,9 +7,11 @@
             [metabase.models.table :refer [Table]]
             [metabase.query-processor.middleware.expand :as ql]
             [metabase.sync.interface :as si]
-            [toucan.db :as db]))
+            [toucan.db :as db]
+            [clojure.tools.logging :as log]))
 
 (defn- qp-query [db-id query]
+  {:pre [(integer? db-id)]}
   (-> (qp/process-query
        {:type     :query
         :database db-id
@@ -28,9 +30,15 @@
   [table]
   {:pre  [(map? table)]
    :post [(integer? %)]}
-  (-> (qp-query (:db_id table) (ql/query (ql/source-table (:id table))
-                                         (ql/aggregation (ql/count))))
-      first first long))
+  (let [results (qp-query (:db_id table) (ql/query (ql/source-table (:id table))
+                                                   (ql/aggregation (ql/count))))]
+    (try (-> results first first long)
+         (catch Throwable e
+           (log/error "Error fetching table row count:"
+                      (u/pprint-to-str results))
+           (throw e))))
+  (->
+   first first long))
 
 (defn field-distinct-values
   "Return the distinct values of FIELD.

@@ -1,18 +1,20 @@
 (ns metabase.sync.sync-metadata.tables
   "Logic for updating Metabase Table models from metadata fetched from a physical DB."
-  (:require [clojure.string :as str]
+  (:require [clojure
+             [data :as data]
+             [string :as str]]
+            [clojure.tools.logging :as log]
             [metabase.models
              [humanization :as humanization]
              [table :as table :refer [Table]]]
-            [metabase.sync.fetch-metadata :as fetch-metadata :refer [DatabaseMetadata DatabaseMetadataTable]]
+            [metabase.sync
+             [fetch-metadata :as fetch-metadata]
+             [interface :as i]
+             [util :as sync-util]]
             [metabase.sync.sync-metadata.metabase-metadata :as metabase-metadata]
-            [schema.core :as s]
-            [toucan.db :as db]
             [metabase.util :as u]
-            [clojure.data :as data]
-            [clojure.tools.logging :as log]
-            [metabase.sync.util :as sync-util])
-  (:import metabase.models.database.DatabaseInstance))
+            [schema.core :as s]
+            [toucan.db :as db]))
 
 ;;; ------------------------------------------------------------  "Crufty" Tables ------------------------------------------------------------
 
@@ -71,7 +73,7 @@
 
 (s/defn ^:private ^:always-validate is-crufty-table? :- s/Bool
   "Should we give newly created TABLE a `visibility_type` of `:cruft`?"
-  [table :- DatabaseMetadataTable]
+  [table :- i/DatabaseMetadataTable]
   (boolean (some #(re-find % (str/lower-case (:name table))) crufty-table-patterns)))
 
 
@@ -81,7 +83,7 @@
 
 (s/defn ^:private ^:always-validate create-or-reactivate-tables!
   "Create NEW-TABLES for database, or if they already exist, mark them as active."
-  [database :- DatabaseInstance, new-tables :- #{DatabaseMetadataTable}]
+  [database :- i/DatabaseInstance, new-tables :- #{i/DatabaseMetadataTable}]
   (log/info "Found new tables:"
             (for [table new-tables]
               (sync-util/name-for-logging (table/map->TableInstance table))))
@@ -107,7 +109,7 @@
 
 (s/defn ^:private ^:always-validate retire-tables!
   "Mark any OLD-TABLES belonging to DATABASE as inactive."
-  [database :- DatabaseInstance, old-tables :- #{DatabaseMetadataTable}]
+  [database :- i/DatabaseInstance, old-tables :- #{i/DatabaseMetadataTable}]
   (log/info "Marking tables as inactive:"
             (for [table old-tables]
               (sync-util/name-for-logging (table/map->TableInstance table))))
@@ -118,29 +120,31 @@
       :active false)))
 
 
-(s/defn ^:private ^:always-validate db-metadata :- #{DatabaseMetadataTable}
-  [database :- DatabaseInstance]
+(s/defn ^:private ^:always-validate db-metadata :- #{i/DatabaseMetadataTable}
+  [database :- i/DatabaseInstance]
   (set (for [table (:tables (fetch-metadata/db-metadata database))
              :when (not (metabase-metadata/is-metabase-metadata-table? table))]
          table)))
 
-(s/defn ^:private ^:always-validate our-metadata :- #{DatabaseMetadataTable}
+(s/defn ^:private ^:always-validate our-metadata :- #{i/DatabaseMetadataTable}
   "Return information about what Tables we have for this DB in the Metabase application DB."
-  [database :- DatabaseInstance]
+  [database :- i/DatabaseInstance]
   (set (map (partial into {})
             (db/select [Table :name :schema]
               :db_id  (u/get-id database)
               :active true))))
 
 (s/defn ^:always-validate sync-tables!
-  [database :- DatabaseInstance]
+  [database :- i/DatabaseInstance]
   ;; determine what's changed between what info we have and what's in the DB
   (let [db-metadata             (db-metadata database)
         our-metadata            (our-metadata database)
         [new-tables old-tables] (data/diff db-metadata our-metadata)]
     ;; create new tables as needed or mark them as active again
     (when (seq new-tables)
-      (create-or-reactivate-tables! database new-tables))
+      (sync-util/with-error-handling (format "Error creating/reactivating tables for %s" (sync-util/name-for-logging database))
+        (create-or-reactivate-tables! database new-tables)))
     ;; mark old tables as inactive
     (when (seq old-tables)
-      (retire-tables! database old-tables))))
+      (sync-util/with-error-handling (format "Error retiring tables for %s" (sync-util/name-for-logging database))
+        (retire-tables! database old-tables)))))

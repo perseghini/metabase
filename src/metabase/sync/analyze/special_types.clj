@@ -7,29 +7,28 @@
     large (long) values.)"
   (:require [clojure.tools.logging :as log]
             [metabase.models.field :refer [Field]]
+            [metabase.sync
+             [interface :as i]
+             [util :as sync-util]]
             [metabase.sync.analyze.special-types
              [name :as name]
              [values :as values]]
-            [metabase.sync.util :as sync-util]
             [metabase.util :as u]
             [schema.core :as s]
-            [toucan.db :as db])
-  (:import metabase.models.database.DatabaseInstance
-           metabase.models.field.FieldInstance
-           metabase.models.table.TableInstance))
+            [toucan.db :as db]))
 
 (s/defn ^:private ^:always-validate update-fields-last-analyzed!
   "Update the `last_analyzed` date for all the fields in TABLE."
-  [table :- TableInstance]
+  [table :- i/TableInstance]
   (db/update-where! Field {:table_id        (u/get-id table)
                            :active          true
                            :visibility_type [:not= "retired"]}
     :last_analyzed (u/new-sql-timestamp)))
 
-(s/defn ^:private ^:always-validate fields-to-infer-special-types-for :- (s/maybe [FieldInstance])
+(s/defn ^:private ^:always-validate fields-to-infer-special-types-for :- (s/maybe [i/FieldInstance])
   "Return a sequences of Fields belonging to TABLE for which we should attempt to determine special type.
    This should include fields that are active, visibile, and without an existing special type."
-  [table :- TableInstance]
+  [table :- i/TableInstance]
   (seq (db/select Field
          :table_id        (u/get-id table)
          :special_type    nil
@@ -40,7 +39,7 @@
 (s/defn ^:private ^:always-validate infer-special-types-for-table!
   "Infer (and set) the special types and preview display status for Fields
    belonging to TABLE, and mark the fields as recently analyzed."
-  [table :- TableInstance]
+  [table :- i/TableInstance]
   ;; fetch any fields with no special type. See if we can infer a type from their name.
   (when-let [fields (fields-to-infer-special-types-for table)]
     (name/infer-special-types-by-name! table fields))
@@ -54,7 +53,7 @@
 (s/defn ^:always-validate infer-special-types!
   "Infer (and set) the special types and preview display status for all the
    Fields belonging to DATABASE, and mark the fields as recently analyzed."
-  [database :- DatabaseInstance]
+  [database :- i/DatabaseInstance]
   (let [tables (sync-util/db->sync-tables database)]
     (sync-util/with-emoji-progress-bar [emoji-progress-bar (count tables)]
       (doseq [table tables]

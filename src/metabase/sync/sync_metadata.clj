@@ -6,17 +6,18 @@
    2.  Sync fields (`metabase.sync.sync-metadata.fields`)
    3.  Sync FKs    (`metabase.sync.sync-metadata.fks`)
    4.  Sync Metabase Metadata table (`metabase.sync.sync-metadata.metabase-metadata`)"
-  (:require [metabase.sync.sync-metadata
+  (:require [metabase.sync
+             [interface :as i]
+             [util :as sync-util]]
+            [metabase.sync.sync-metadata
              [fields :as sync-fields]
              [fks :as sync-fks]
              [metabase-metadata :as metabase-metadata]
              [tables :as sync-tables]]
-            [metabase.sync.util :as sync-util]
-            [schema.core :as s])
-  (:import metabase.models.database.DatabaseInstance))
+            [schema.core :as s]))
 
 (s/defn ^:always-validate sync-db-metadata!
-  [database :- DatabaseInstance]
+  [database :- i/DatabaseInstance]
   (sync-util/sync-operation :database-sync database (format "Sync metadata for %s" (sync-util/name-for-logging database))
     ;; Make sure the relevant table models are up-to-date
     (sync-tables/sync-tables! database)

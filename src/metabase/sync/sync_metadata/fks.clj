@@ -6,16 +6,15 @@
              [field :refer [Field]]
              [table :refer [Table]]]
             [metabase.sync
-             [fetch-metadata :as fetch-metadata :refer [FKMetadataEntry]]
+             [fetch-metadata :as fetch-metadata]
+             [interface :as i]
              [util :as sync-util]]
             [metabase.util :as u]
             [schema.core :as s]
-            [toucan.db :as db])
-  (:import metabase.models.database.DatabaseInstance
-           metabase.models.table.TableInstance))
+            [toucan.db :as db]))
 
 (s/defn ^:private ^:always-validate mark-fk!
-  [database :- DatabaseInstance, table :- TableInstance, fk :- FKMetadataEntry]
+  [database :- i/DatabaseInstance, table :- i/TableInstance, fk :- i/FKMetadataEntry]
   (let [source-field (db/select-one Field
                        :table_id           (u/get-id table)
                        :%lower.name        (str/lower-case (:fk-column-name fk))
@@ -48,11 +47,12 @@
 
 
 (s/defn ^:private ^:always-validate sync-fks-for-table!
-  [database :- DatabaseInstance, table :- TableInstance]
+  [database :- i/DatabaseInstance, table :- i/TableInstance]
   (doseq [fk (fetch-metadata/fk-metadata database table)]
     (mark-fk! database table fk)))
 
 (s/defn ^:always-validate sync-fks!
-  [database :- DatabaseInstance]
+  [database :- i/DatabaseInstance]
   (doseq [table (sync-util/db->sync-tables database)]
-    (sync-fks-for-table! database table)))
+    (sync-util/with-error-handling (format "Error syncing FKs for %s" (sync-util/name-for-logging table))
+      (sync-fks-for-table! database table))))

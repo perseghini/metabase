@@ -6,7 +6,7 @@
              [util :as u]]
             [metabase.db.metadata-queries :as metadata-queries]
             [metabase.models
-             [field :refer [Field]]
+             [field :refer [Field] :as field]
              [table :as table :refer [Table]]]
             [metabase.sync.analyze.special-types.values :as values]
             [metabase.test
@@ -37,50 +37,48 @@
 (def ^:const ^:private fake-values-seq-json
   "A sequence of values that should be marked is valid JSON.")
 
+(defn- values-are-valid-json? [values]
+  (= (#'values/test:json (field/map->FieldInstance {:base_type :type/Text}) values)
+     :type/JSON))
+
 ;; When all the values are valid JSON dicts they're valid JSON
 (expect
-  (#'values/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
-                                    "{\"this\":\"is\",\"valid\":\"json\"}"
-                                    "{\"this\":\"is\",\"valid\":\"json\"}"]))
+  (values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
+                           "{\"this\":\"is\",\"valid\":\"json\"}"
+                           "{\"this\":\"is\",\"valid\":\"json\"}"]))
 
 ;; When all the values are valid JSON arrays they're valid JSON
 (expect
-  (#'values/values-are-valid-json? ["[1, 2, 3, 4]"
-                                    "[1, 2, 3, 4]"
-                                    "[1, 2, 3, 4]"]))
+  (values-are-valid-json? ["[1, 2, 3, 4]"
+                           "[1, 2, 3, 4]"
+                           "[1, 2, 3, 4]"]))
 
 ;; Some combo of both can still be marked as JSON
 (expect
-  (#'values/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
-                                    "[1, 2, 3, 4]"
-                                    "[1, 2, 3, 4]"]))
-
-;; If the values have some valid JSON dicts but is mostly null, it's still valid JSON
-(expect
-  (#'values/values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
-                                    nil
-                                    nil]))
-
-;; If every value is nil then the values should not be considered valid JSON
-(expect false
-        (#'values/values-are-valid-json? [nil nil nil]))
+  (values-are-valid-json? ["{\"this\":\"is\",\"valid\":\"json\"}"
+                           "[1, 2, 3, 4]"
+                           "[1, 2, 3, 4]"]))
 
 ;; Check that things that aren't dictionaries or arrays aren't marked as JSON
-(expect false (#'values/values-are-valid-json? ["\"A JSON string should not cause a Field to be marked as JSON\""]))
-(expect false (#'values/values-are-valid-json? ["100"]))
-(expect false (#'values/values-are-valid-json? ["true"]))
-(expect false (#'values/values-are-valid-json? ["false"]))
+(expect false (values-are-valid-json? ["\"A JSON string should not cause a Field to be marked as JSON\""]))
+(expect false (values-are-valid-json? ["100"]))
+(expect false (values-are-valid-json? ["true"]))
+(expect false (values-are-valid-json? ["false"]))
 
 ;; Check that things that are valid emails are marked as Emails
-(expect true (#'values/values-are-valid-emails? ["helper@metabase.com"]))
-(expect true (#'values/values-are-valid-emails? ["helper@metabase.com", "someone@here.com", "help@nope.com"]))
-(expect true (#'values/values-are-valid-emails? ["helper@metabase.com", nil, "help@nope.com"]))
 
-(expect false (#'values/values-are-valid-emails? ["helper@metabase.com", "1111IsNot!An....email", "help@nope.com"]))
-(expect false (#'values/values-are-valid-emails? ["\"A string should not cause a Field to be marked as email\""]))
-(expect false (#'values/values-are-valid-emails? [100]))
-(expect false (#'values/values-are-valid-emails? ["true"]))
-(expect false (#'values/values-are-valid-emails? ["false"]))
+(defn- values-are-valid-emails? [values]
+  (= (#'values/test:email (field/map->FieldInstance {:base_type :type/Text}) values)
+     :type/Email))
+
+(expect true (values-are-valid-emails? ["helper@metabase.com"]))
+(expect true (values-are-valid-emails? ["helper@metabase.com", "someone@here.com", "help@nope.com"]))
+
+(expect false (values-are-valid-emails? ["helper@metabase.com", "1111IsNot!An....email", "help@nope.com"]))
+(expect false (values-are-valid-emails? ["\"A string should not cause a Field to be marked as email\""]))
+(expect false (values-are-valid-emails? [100]))
+(expect false (values-are-valid-emails? ["true"]))
+(expect false (values-are-valid-emails? ["false"]))
 
 ;; Tests to avoid analyzing hidden tables
 (defn- unanalyzed-fields-count [table]

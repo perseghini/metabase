@@ -5,8 +5,7 @@
             [metabase.sync
              [interface :as i]
              [util :as sync-util]]
-            [schema.core :as s])
-  (:import metabase.models.database.DatabaseInstance))
+            [schema.core :as s]))
 
 ;; TODO - these should probably be moved to the `field-values` code in `metabase.models.field-values`, and used everywhere it's appropriate
 
@@ -20,7 +19,7 @@
 
 
 
-(s/defn ^:always-validate update-field-values! [database :- DatabaseInstance]
+(s/defn ^:always-validate update-field-values! [database :- i/DatabaseInstance]
   (sync-util/sync-operation :cache-field-values database (format "Cache field values in %s" (sync-util/name-for-logging database))
     (doseq [table (sync-util/db->sync-tables database)
             field (sync-util/table->sync-fields table)

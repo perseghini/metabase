@@ -3,63 +3,20 @@
    information about tables, schemas, and fields, and their types.
    For example, with SQL databases, these functions use the JDBC DatabaseMetaData to get this information."
   (:require [metabase.driver :as driver]
-            [metabase.models
-             database
-             table]
-            [metabase.util.schema :as su]
-            [schema.core :as s])
-  (:import metabase.models.database.DatabaseInstance
-           metabase.models.table.TableInstance))
+            [metabase.sync.interface :as i]
+            [schema.core :as s]))
 
-;; TODO - should these be moved to an `interface` file?
-
-(def DatabaseMetadataTable
-  "Schema for the expected output of `describe-database` for a Table."
-  {:name   su/NonBlankString
-   :schema (s/maybe su/NonBlankString)})
-
-(def DatabaseMetadata
-  "Schema for the expected output of `describe-database`."
-  {:tables #{DatabaseMetadataTable}})
-
-
-(def TableMetadataField
-  "Schema for a given Field as provided in `describe-table`."
-  {:name                           su/NonBlankString
-   :base-type                      su/FieldType
-   (s/optional-key :special-type)  (s/maybe su/FieldType)
-   (s/optional-key :pk?)           s/Bool
-   (s/optional-key :nested-fields) #{(s/recursive #'TableMetadataField)}
-   (s/optional-key :custom)        {s/Any s/Any}})
-
-(def TableMetadata
-  "Schema for the expected output of `describe-table`."
-  {:name   su/NonBlankString
-   :schema (s/maybe su/NonBlankString)
-   :fields #{TableMetadataField}})
-
-(def FKMetadataEntry
-  {:fk-column-name   su/NonBlankString
-   :dest-table       {:name   su/NonBlankString
-                      :schema (s/maybe su/NonBlankString)}
-   :dest-column-name su/NonBlankString})
-
-(def FKMetadata
-  "Schema for the expected output of `describe-table-fks`."
-  (s/maybe #{FKMetadataEntry}))
-
-
-(s/defn ^:always-validate db-metadata :- DatabaseMetadata
+(s/defn ^:always-validate db-metadata :- i/DatabaseMetadata
   "Get basic Metadata about a Database and its Tables. Doesn't include information about the fields."
-  [database :- DatabaseInstance]
+  [database :- i/DatabaseInstance]
   (driver/describe-database (driver/->driver database) database))
 
-(s/defn ^:always-validate table-metadata :- TableMetadata
-  [database :- DatabaseInstance, table :- TableInstance]
+(s/defn ^:always-validate table-metadata :- i/TableMetadata
+  [database :- i/DatabaseInstance, table :- i/TableInstance]
   (driver/describe-table (driver/->driver database) database table))
 
-(s/defn ^:always-validate fk-metadata :- FKMetadata
-  [database :- DatabaseInstance, table :- TableInstance]
+(s/defn ^:always-validate fk-metadata :- i/FKMetadata
+  [database :- i/DatabaseInstance, table :- i/TableInstance]
   (let [driver (driver/->driver database)]
     (when (driver/driver-supports? driver :foreign-keys)
       (driver/describe-table-fks driver database table))))

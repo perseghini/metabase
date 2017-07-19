@@ -5,17 +5,12 @@
    1.  Sync Metadata      (`metabase.sync.sync-metadata`)
    2.  Analysis           (`metabase.sync.analyze`)
    3.  Cache Field Values (`metabase.sync.field-values`)"
-  (:require [metabase.driver :as driver]
-            metabase.models.database
-            [metabase.sync
+  (:require [metabase.sync
              [analyze :as analyze]
              [field-values :as field-values]
+             [interface :as i]
              [sync-metadata :as sync-metadata]]
-            [schema.core :as s]
-            [metabase.sync.util :as sync-util]
-            [metabase.util :as u])
-  (:import metabase.models.database.DatabaseInstance
-           metabase.models.table.TableInstance))
+            [schema.core :as s]))
 
 (def ^:private SyncDatabaseOptions
   {(s/optional-key :full-sync?) s/Bool})
@@ -23,7 +18,7 @@
 (s/defn ^:always-validate sync-database!
   ([database]
    (sync-database! database {:full-sync? true}))
-  ([database :- DatabaseInstance, options :- SyncDatabaseOptions]
+  ([database :- i/DatabaseInstance, options :- SyncDatabaseOptions]
    ;; First make sure Tables, Fields, and FK information is up-to-date
    (sync-metadata/sync-db-metadata! database)
    (when (:full-sync? options)
@@ -34,5 +29,5 @@
 
 
 (s/defn ^:always-validate sync-table!
-  [table :- TableInstance]
+  [table :- i/TableInstance]
   (throw (UnsupportedOperationException.)))
