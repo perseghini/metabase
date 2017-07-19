@@ -57,5 +57,5 @@
 (s/defn ^:always-validate fk-metadata :- FKMetadata
   [database :- DatabaseInstance, table :- TableInstance]
   (let [driver (driver/->driver database)]
-    (when (driver/driver-supports? :foreign-keys)
+    (when (driver/driver-supports? driver :foreign-keys)
       (driver/describe-table-fks driver database table))))

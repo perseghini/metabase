@@ -36,17 +36,14 @@
 
 (s/defn ^:private ^:always-validate infer-special-types-for-table!
   [table :- TableInstance]
-  (try
-    ;; fetch any fields with no special type. See if we can infer a type from their name.
-    (when-let [fields (fields-to-infer-special-types-for table)]
-      (name/infer-special-types-by-name! table fields))
-    ;; Ok, now fetch fields that *still* don't have a special type. Try to infer a type from a sequence of their values.
-    (when-let [fields (fields-to-infer-special-types-for table)]
-      (values/infer-special-types-by-value! table fields))
-    ;; Ok, now let's mark all the fields as having been recently analyzed
-    (update-fields-last-analyzed! table)
-    (catch Throwable t
-      (log/error "Unexpected error analyzing table" t))))
+  ;; fetch any fields with no special type. See if we can infer a type from their name.
+  (when-let [fields (fields-to-infer-special-types-for table)]
+    (name/infer-special-types-by-name! table fields))
+  ;; Ok, now fetch fields that *still* don't have a special type. Try to infer a type from a sequence of their values.
+  (when-let [fields (fields-to-infer-special-types-for table)]
+    (values/infer-special-types-by-value! table fields))
+  ;; Ok, now let's mark all the fields as having been recently analyzed
+  (update-fields-last-analyzed! table))
 
 
 (s/defn ^:always-validate infer-special-types!

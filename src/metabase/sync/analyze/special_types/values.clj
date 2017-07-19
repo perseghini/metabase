@@ -60,7 +60,7 @@
 (defn- values-are-valid-json?
   "`true` if at every item in VALUES is `nil` or a valid string-encoded JSON dictionary or array, and at least one of those is non-nil."
   [values]
-  (try
+  (u/ignore-exceptions
     (loop [at-least-one-non-nil-value? false, [val & more] values]
       (cond
         (and (not val)
@@ -71,9 +71,7 @@
         :else                  (do (u/prog1 (json/parse-string val)
                                      (assert (or (map? <>)
                                                  (sequential? <>))))
-                                   (recur true more))))
-    (catch Throwable _
-      false)))
+                                   (recur true more))))))
 
 (defn- test:json-special-type
   "Mark FIELD as `:json` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values
@@ -93,7 +91,7 @@
 (defn- values-are-valid-emails?
   "`true` if at every item in VALUES is `nil` or a valid email, and at least one of those is non-nil."
   [values]
-  (try
+  (u/ignore-exceptions
     (loop [at-least-one-non-nil-value? false, [val & more] values]
       (cond
         (and (not val)
@@ -102,9 +100,7 @@
         ;; If val is non-nil, check that it's a JSON dictionary or array. We don't want to mark Fields containing other
         ;; types of valid JSON values as :json (e.g. a string representation of a number or boolean)
         :else                  (do (assert (u/is-email? val))
-                                   (recur true more))))
-    (catch Throwable _
-      false)))
+                                   (recur true more))))))
 
 (defn- test:email-special-type
   "Mark FIELD as `:email` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values

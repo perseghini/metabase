@@ -77,11 +77,11 @@
 (defn do-with-duplicate-ops-prevented
   "Implementation for `with-duplicate-ops-prevented`; prefer that instead."
   [operation database-or-id f]
-  (println "Current operations:" @operation->db-ids) ; NOCOMMIT
   (when-not (contains? (@operation->db-ids operation) (u/get-id database-or-id))
     (try
       ;; mark this database as currently syncing so we can prevent duplicate sync attempts (#2337)
       (swap! operation->db-ids update operation #(conj (or % #{}) (u/get-id database-or-id)))
+      (println "Sync operations in flight:" @operation->db-ids) ; NOCOMMIT
       ;; do our work
       (f)
       ;; always cleanup our tracking when we are through
@@ -98,9 +98,16 @@
   [operation database-or-id & body]
   `(do-with-duplicate-ops-prevented ~operation ~database-or-id (fn [] ~@body)))
 
+(defn do-with-error-handling [f]
+  (try (f)
+       (catch Throwable e
+         (log/error (u/format-color 'red "Error running sync step: %s\n%s"
+                      (or (.getMessage e) (class e))
+                      (u/pprint-to-str (u/filtered-stacktrace e)))))))
+
 (defmacro sync-in-context {:style/indent 1} [database & body]
   `(driver/sync-in-context (driver/->driver ~database) ~database
-     (fn [] ~@body)))
+     (partial do-with-error-handling (fn [] ~@body))))
 
 ;; TODO - simplify this macro and the other ones that it uses!
 (defmacro sync-operation {:style/indent 3} [operation database message & body]

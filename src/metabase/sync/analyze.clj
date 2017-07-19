@@ -15,6 +15,6 @@
   "Perform in-depth analysis on the data for all Tables in a given DATABASE.
    This is dependent on what each database driver supports, but includes things like cardinality testing and table row counting."
   [database :- DatabaseInstance]
-  (sync-util/sync-operation :database-analyze database (format "Analyze data in %s" (sync-util/name-for-logging database))
+  (sync-util/sync-operation :database-analyze database (format "Analyze data for %s" (sync-util/name-for-logging database))
     (table-row-count/update-table-row-counts! database)
     (special-types/infer-special-types! database)))

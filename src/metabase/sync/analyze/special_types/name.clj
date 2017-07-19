@@ -3,11 +3,13 @@
   (:require [clojure.string :as str]
             [metabase
              [config :as config]
+             types
              [util :as u]]
             [metabase.models.field :refer [Field]]
             [metabase.util.schema :as su]
             [schema.core :as s]
-            [toucan.db :as db])
+            [toucan.db :as db]
+            [clojure.tools.logging :as log])
   (:import metabase.models.field.FieldInstance
            metabase.models.table.TableInstance))
 
@@ -74,6 +76,7 @@
       (some (fn [[name-pattern valid-base-types special-type]]
               (when (and (some (partial isa? base-type) valid-base-types)
                          (re-matches name-pattern (str/lower-case field-name)))
+                (log/debug (format "Field '%s' (%s) matches pattern '%s', so giving it a special type of %s." field-name base-type name-pattern special-type))
                 special-type))
             pattern+base-types+special-type)))
 
