@@ -25,7 +25,7 @@
   "Schema for a given Field as provided in `describe-table`."
   {:name                           su/NonBlankString
    :base-type                      su/FieldType
-   (s/optional-key :special-type)  su/FieldType
+   (s/optional-key :special-type)  (s/maybe su/FieldType)
    (s/optional-key :pk?)           s/Bool
    (s/optional-key :nested-fields) #{(s/recursive #'TableMetadataField)}
    (s/optional-key :custom)        {s/Any s/Any}})

@@ -93,14 +93,13 @@
 (s/defn ^:private ^:always-validate update-metadata!
   "Make sure things like PK status and base-type are in sync with what has come back from the DB."
   [table :- TableInstance, fields :- #{TableMetadataField}]
-  (let [existing-fields      (db/select [Field :base-type :special-type :name :id]
+  (let [existing-fields      (db/select [Field :base_type :special_type :name :id]
                                :table_id (u/get-id table)
                                :active   true)
         field-name->metadata (u/key-by (comp str/lower-case :name) fields)]
     ;; TODO - not sure this is really needed. Isn't there some better way to make sure Fields have up-to-date special types?
     (doseq [field existing-fields]
       (when-let [metadata (get field-name->metadata (str/lower-case (:name field)))]
-        (println "metadata:" metadata)    ; NOCOMMIT
         (db/update! Field (u/get-id field)
           (merge {:base_type (:base-type metadata)}
                  (when-not (:special-type field)
@@ -130,7 +129,7 @@
   (let [field-names-in-b (set (map (comp str/lower-case :name)
                                    b))]
     (set (for [field a
-               :when (not (contains? field-names-in-b) (str/lower-case (:name field)))]
+               :when (not (contains? field-names-in-b (str/lower-case (:name field))))]
            field))))
 
 
