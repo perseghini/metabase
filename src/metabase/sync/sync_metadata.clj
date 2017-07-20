@@ -27,3 +27,9 @@
     (sync-fks/sync-fks! database)
     ;; finally, sync the metadata metadata table if it exists.
     (metabase-metadata/sync-metabase-metadata! database)))
+
+(s/defn ^:always-validatge sync-table-metadata!
+  "Sync the metadata for an individual TABLE -- make sure Fields and FKs are up-to-date."
+  [table :- i/TableInstance]
+  (sync-fields/sync-fields-for-table! table)
+  (sync-fks/sync-fks-for-table! table))

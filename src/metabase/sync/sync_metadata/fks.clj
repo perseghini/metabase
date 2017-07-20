@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [metabase.models
              [field :refer [Field]]
-             [table :refer [Table]]]
+             [table :as table :refer [Table]]]
             [metabase.sync
              [fetch-metadata :as fetch-metadata]
              [interface :as i]
@@ -46,13 +46,15 @@
         :fk_target_field_id (u/get-id dest-field)))))
 
 
-(s/defn ^:private ^:always-validate sync-fks-for-table!
-  [database :- i/DatabaseInstance, table :- i/TableInstance]
-  (doseq [fk (fetch-metadata/fk-metadata database table)]
-    (mark-fk! database table fk)))
+(s/defn ^:always-validate sync-fks-for-table!
+  ([table :- i/TableInstance]
+   (sync-fks-for-table! (table/database table) table))
+  ([database :- i/DatabaseInstance, table :- i/TableInstance]
+   (sync-util/with-error-handling (format "Error syncing FKs for %s" (sync-util/name-for-logging table))
+     (doseq [fk (fetch-metadata/fk-metadata database table)]
+       (mark-fk! database table fk)))))
 
 (s/defn ^:always-validate sync-fks!
   [database :- i/DatabaseInstance]
   (doseq [table (sync-util/db->sync-tables database)]
-    (sync-util/with-error-handling (format "Error syncing FKs for %s" (sync-util/name-for-logging table))
-      (sync-fks-for-table! database table))))
+    (sync-fks-for-table! database table)))

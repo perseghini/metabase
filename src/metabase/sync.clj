@@ -16,6 +16,9 @@
   {(s/optional-key :full-sync?) s/Bool})
 
 (s/defn ^:always-validate sync-database!
+  "Perform all the different sync operations synchronously for DATABASE.
+   You may optionally supply OPTIONS, which can be used to disable so-called 'full-sync',
+   meaning just metadata will be synced, but no 'analysis' will be done."
   ([database]
    (sync-database! database {:full-sync? true}))
   ([database :- i/DatabaseInstance, options :- SyncDatabaseOptions]
@@ -29,5 +32,8 @@
 
 
 (s/defn ^:always-validate sync-table!
+  "Perform all the different sync operations, "
   [table :- i/TableInstance]
-  (throw (UnsupportedOperationException.)))
+  (sync-metadata/sync-table-metadata! table)
+  (analyze/analyze-table! table)
+  (field-values/update-field-values-for-table! table))

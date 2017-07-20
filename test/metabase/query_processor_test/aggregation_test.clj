@@ -226,14 +226,11 @@
    :cols        [(breakout-col (users-col :name))
                  (aggregate-col :sum (users-col :id))]
    :native_form true}
-  (do
-    (println "users tables:" (toucan.db/select ['Table :schema :name :db_id :id] :%lower.name "users")) ; NOCOMMIT
-    (println "users fields:" (toucan.db/select ['Field :name :special_type :table_id] :%lower.name "name")) ; NOCOMMIT
-    (->> (data/run-query users
-           (ql/aggregation (ql/cum-sum $id))
-           (ql/breakout $name))
-         booleanize-native-form
-         (format-rows-by [str int]))))
+  (->> (data/run-query users
+         (ql/aggregation (ql/cum-sum $id))
+         (ql/breakout $name))
+       booleanize-native-form
+       (format-rows-by [str int])))
 
 
 ;;; Cumulative sum w/ a different breakout field that requires grouping

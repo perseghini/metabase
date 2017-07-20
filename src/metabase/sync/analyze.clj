@@ -18,3 +18,10 @@
   (sync-util/sync-operation :database-analyze database (format "Analyze data for %s" (sync-util/name-for-logging database))
     (table-row-count/update-table-row-counts! database)
     (special-types/infer-special-types! database)))
+
+
+(s/defn ^:always-validate analyze-table!
+  "Perform in-depth analysis for a TABLE."
+  [table :- i/TableInstance]
+  (table-row-count/update-row-count-for-table! table)
+  (special-types/infer-special-types-for-table! table))

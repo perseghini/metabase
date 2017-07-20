@@ -7,9 +7,7 @@
              [driver :as driver]
              [events :as events]
              [util :as u]]
-            [metabase.models
-             [field :refer [Field]]
-             [table :refer [Table]]]
+            [metabase.models.table :refer [Table]]
             [metabase.query-processor.interface :as i]
             [toucan.db :as db])
   (:import metabase.models.database.DatabaseInstance
@@ -178,15 +176,11 @@
   [database-or-id]
   (db/select Table, :db_id (u/get-id database-or-id), :active true, :visibility_type nil))
 
-;; TODO - make sure the new sync code uses this.
-(defn table->sync-fields
-  "Return all the Fields that should go through the sync processes for TABLE-OR-ID."
-  [table-or-id]
-  (db/select Field :table_id (u/get-id table-or-id), :active true, :visibility_type "normal"))
 
-
-(defprotocol INameForLogging
-  (name-for-logging [this]))
+(defprotocol ^:private INameForLogging
+  (name-for-logging [this]
+    "Return an appropriate string for logging an object in sync logging messages.
+     Should be something like \"postgres Database 'test-data'\""))
 
 (extend-protocol INameForLogging
   DatabaseInstance

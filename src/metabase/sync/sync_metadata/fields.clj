@@ -11,7 +11,8 @@
              [util :as sync-util]]
             [metabase.util :as u]
             [schema.core :as s]
-            [toucan.db :as db]))
+            [toucan.db :as db]
+            [metabase.models.table :as table]))
 
 #_(defn- update-field-from-field-def!
   "Update an EXISTING-FIELD from the given FIELD-DEF."
@@ -128,24 +129,26 @@
            field))))
 
 
-(s/defn ^:private ^:always-validate sync-fields-for-table!
-  [database :- i/DatabaseInstance, table :- i/TableInstance]
-  (let [db-metadata  (db-metadata database table)
-        our-metadata (our-metadata table)
-        new-fields   (diff-fields db-metadata our-metadata)
-        old-fields   (diff-fields our-metadata db-metadata)]
-    ;; create new tables as needed or mark them as active again
-    (when (seq new-fields)
-      (create-or-reactivate-fields! table new-fields))
-    ;; mark old fields as inactive
-    (when (seq old-fields)
-      (retire-fields! table old-fields))
-    ;; now that tables are synced and fields created as needed make sure field properties are in sync
-    (update-metadata! table db-metadata)))
+(s/defn ^:always-validate sync-fields-for-table!
+  ([table :- i/TableInstance]
+   (sync-fields-for-table! (table/database table) table))
+  ([database :- i/DatabaseInstance, table :- i/TableInstance]
+   (sync-util/with-error-handling (format "Error syncing fields for %s" (sync-util/name-for-logging table))
+     (let [db-metadata  (db-metadata database table)
+           our-metadata (our-metadata table)
+           new-fields   (diff-fields db-metadata our-metadata)
+           old-fields   (diff-fields our-metadata db-metadata)]
+       ;; create new tables as needed or mark them as active again
+       (when (seq new-fields)
+         (create-or-reactivate-fields! table new-fields))
+       ;; mark old fields as inactive
+       (when (seq old-fields)
+         (retire-fields! table old-fields))
+       ;; now that tables are synced and fields created as needed make sure field properties are in sync
+       (update-metadata! table db-metadata)))))
 
 
 (s/defn ^:always-validate sync-fields!
   [database :- i/DatabaseInstance]
   (doseq [table (sync-util/db->sync-tables database)]
-    (sync-util/with-error-handling (format "Error syncing fields for %s" (sync-util/name-for-logging table))
-      (sync-fields-for-table! database table))))
+    (sync-fields-for-table! database table)))

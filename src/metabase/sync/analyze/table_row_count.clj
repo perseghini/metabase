@@ -16,15 +16,15 @@
   (sync-util/with-error-handling (format "Unable to determine row count for %s" (sync-util/name-for-logging table))
     (queries/table-row-count table)))
 
-(s/defn ^:private ^:always-validate update-row-count-for-table!
+(s/defn ^:always-validate update-row-count-for-table!
   [table :- i/TableInstance]
-  (when-let [row-count (table-row-count table)]
-    (log/debug (format "Set table row count for %s to %d" (sync-util/name-for-logging table) row-count))
-    (db/update! Table (u/get-id table)
-      :rows row-count)))
+  (sync-util/with-error-handling (format "Error setting table row count for %s" (sync-util/name-for-logging table))
+    (when-let [row-count (table-row-count table)]
+      (log/debug (format "Set table row count for %s to %d" (sync-util/name-for-logging table) row-count))
+      (db/update! Table (u/get-id table)
+        :rows row-count))))
 
 (s/defn ^:always-validate update-table-row-counts!
   [database :- i/DatabaseInstance]
   (doseq [table (sync-util/db->sync-tables database)]
-    (sync-util/with-error-handling (format "Error setting table row count for %s" (sync-util/name-for-logging table))
-      (update-row-count-for-table! table))))
+    (update-row-count-for-table! table)))

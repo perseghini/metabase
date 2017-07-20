@@ -36,19 +36,19 @@
          :visibility_type [:not= "retired"]
          :preview_display true)))
 
-(s/defn ^:private ^:always-validate infer-special-types-for-table!
+(s/defn ^:always-validate infer-special-types-for-table!
   "Infer (and set) the special types and preview display status for Fields
    belonging to TABLE, and mark the fields as recently analyzed."
   [table :- i/TableInstance]
-  ;; fetch any fields with no special type. See if we can infer a type from their name.
-  (when-let [fields (fields-to-infer-special-types-for table)]
-    (name/infer-special-types-by-name! table fields))
-  ;; Ok, now fetch fields that *still* don't have a special type. Try to infer a type from a sequence of their values.
-  (when-let [fields (fields-to-infer-special-types-for table)]
-    (values/infer-special-types-by-value! table fields))
-  ;; Ok, now let's mark all the fields as having been recently analyzed
-  (update-fields-last-analyzed! table))
-
+  (sync-util/with-error-handling (format "Error inferring special types for %s" (sync-util/name-for-logging table))
+    ;; fetch any fields with no special type. See if we can infer a type from their name.
+    (when-let [fields (fields-to-infer-special-types-for table)]
+      (name/infer-special-types-by-name! table fields))
+    ;; Ok, now fetch fields that *still* don't have a special type. Try to infer a type from a sequence of their values.
+    (when-let [fields (fields-to-infer-special-types-for table)]
+      (values/infer-special-types-by-value! table fields))
+    ;; Ok, now let's mark all the fields as having been recently analyzed
+    (update-fields-last-analyzed! table)))
 
 (s/defn ^:always-validate infer-special-types!
   "Infer (and set) the special types and preview display status for all the
@@ -57,6 +57,5 @@
   (let [tables (sync-util/db->sync-tables database)]
     (sync-util/with-emoji-progress-bar [emoji-progress-bar (count tables)]
       (doseq [table tables]
-        (sync-util/with-error-handling (format "Error inferring special types for %s" (sync-util/name-for-logging table))
-          (infer-special-types-for-table! table))
+        (infer-special-types-for-table! table)
         (log/info (u/format-color 'blue "%s Analyzed %s" (emoji-progress-bar) (sync-util/name-for-logging table)))))))
