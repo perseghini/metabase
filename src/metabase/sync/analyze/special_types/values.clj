@@ -58,16 +58,16 @@
 
 (s/defn ^:private ^:always-validate values-satisfy-predicate? :- s/Bool
   "True if enough VALUES satisfy PREDICATE that the field they belong to should be given the corresponding special type."
-  [pred :- (s/pred fn?), values :- Values]
-  (>= (percent-satisfying-predicate pred values)
-      percent-valid-threshold))
+  [pred :- (s/pred fn?), field :- i/FieldInstance, values :- Values]
+  (and (isa? (:base_type field) :type/Text)
+       (>= (percent-satisfying-predicate pred values)
+           percent-valid-threshold)))
 
 
 (s/defn ^:private ^:always-validate test:url :- (s/maybe (s/eq :type/URL))
   "If FIELD is texual, doesn't have a `special_type`, and its non-nil values are primarily URLs, mark it as `special_type` `:type/URL`."
   [field :- i/FieldInstance, values :- Values]
-  (when (and (isa? (:base_type field) :type/Text)
-             (values-satisfy-predicate? u/is-url? values))
+  (when (values-satisfy-predicate? u/is-url? field values)
     :type/URL))
 
 
@@ -80,8 +80,7 @@
   "Mark FIELD as `:json` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values
    are valid serialized JSON dictionaries or arrays."
   [field :- i/FieldInstance, values :- Values]
-  (when (and (isa? (:base_type field) :type/Text)
-             (values-satisfy-predicate? valid-serialized-json? values))
+  (when (values-satisfy-predicate? valid-serialized-json? field values)
     :type/SerializedJSON))
 
 
@@ -89,22 +88,27 @@
   "Mark FIELD as `:email` if it's textual, doesn't already have a special type, the majority of it's values are non-nil, and all of its non-nil values
    are valid emails."
   [field :- i/FieldInstance, values :- Values]
-  (when (and (isa? (:base_type field) :type/Text)
-             (values-satisfy-predicate? u/is-email? values))
+  (when (values-satisfy-predicate? u/is-email? field values)
     :type/Email))
 
 
 ;;; ------------------------------------------------------------ Category ------------------------------------------------------------
 
+(derive :type/DateTime ::cannot-be-category)
+(derive :type/Collection ::cannot-be-category)
+
 (s/defn ^:private ^:always-validate test:category :- (s/maybe (s/eq :type/Category))
   [field :- i/FieldInstance, _]
-  (let [distinct-count (queries/field-distinct-count field i/low-cardinality-threshold)]
-    (when (< distinct-count i/low-cardinality-threshold)
-      (log/debug (format "%s has %d distinct values. Since that is less than %d, we're marking it as a category."
-                         (sync-util/name-for-logging field)
-                         distinct-count
-                         i/low-cardinality-threshold))
-      :type/Category)))
+  (println "(:base_type field):" (:base_type field)) ; NOCOMMIT
+  (println "(isa? (:base_type field) ::cannot-be-category):" (isa? (:base_type field) ::cannot-be-category)) ; NOCOMMIT
+  (when-not (isa? (:base_type field) ::cannot-be-category)
+    (let [distinct-count (queries/field-distinct-count field i/low-cardinality-threshold)]
+      (when (< distinct-count i/low-cardinality-threshold)
+        (log/debug (format "%s has %d distinct values. Since that is less than %d, we're marking it as a category."
+                           (sync-util/name-for-logging field)
+                           distinct-count
+                           i/low-cardinality-threshold))
+        :type/Category))))
 
 
 ;;; ------------------------------------------------------------ Putting it all together ------------------------------------------------------------

@@ -104,7 +104,8 @@
           (log/error (u/format-color 'red "%s: %s\n%s"
                        message
                        (or (.getMessage e) (class e))
-                       (u/pprint-to-str (u/filtered-stacktrace e))))))))
+                       (u/pprint-to-str (or (seq (u/filtered-stacktrace e))
+                                            (.getStackTrace e)))))))))
 
 (defmacro with-error-handling {:style/indent 1} [message & body]
   `(do-with-error-handling ~message (fn [] ~@body)))
