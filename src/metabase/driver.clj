@@ -328,7 +328,9 @@
         (engine->driver engine)))))
 
 (defn ->driver
-  "Return an appropraiate driver for ENGINE-OR-DATABASE-OR-DB-ID."
+  "Return an appropraiate driver for ENGINE-OR-DATABASE-OR-DB-ID.
+   Offered since this is somewhat more flexible in the arguments it accepts."
+  ;; TODO - we should make `engine->driver` and `database-id->driver` private and just use this for everything
   [engine-or-database-or-db-id]
   (if (keyword? engine-or-database-or-db-id)
     (engine->driver engine-or-database-or-db-id)
