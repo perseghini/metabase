@@ -38,6 +38,7 @@
    :fields #{TableMetadataField}})
 
 (def FKMetadataEntry
+  "Schema for an individual entry in `FKMetadata`."
   {:fk-column-name   su/NonBlankString
    :dest-table       {:name   su/NonBlankString
                       :schema (s/maybe su/NonBlankString)}

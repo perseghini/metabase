@@ -14,22 +14,6 @@
             [toucan.db :as db]
             [metabase.models.table :as table]))
 
-#_(defn- update-field-from-field-def!
-  "Update an EXISTING-FIELD from the given FIELD-DEF."
-  {:arglists '([existing-field field-def])}
-  [{:keys [id], :as existing-field} {field-name :name, :keys [base-type special-type pk? parent-id]}]
-  (u/prog1 (assoc existing-field
-             :base_type    base-type
-             :display_name (or (:display_name existing-field)
-                               (humanization/name->human-readable-name field-name))
-             :special_type (or (:special_type existing-field)
-                               special-type
-                               (when pk?
-                                 :type/PK))
-             :parent_id    parent-id)
-    ;; if we have a different base-type or special-type, then update
-    ))
-
 ;; TODO - need to handle nested fields (!)
 #_(defn- save-nested-fields!
   "Save any nested `Fields` for a given parent `Field`.
@@ -98,7 +82,7 @@
       (when-let [metadata (get field-name->metadata (str/lower-case (:name field)))]
         (db/update! Field (u/get-id field)
           (merge {:base_type (:base-type metadata)}
-                 (when-not (:special-type field)
+                 (when-not (:special_type field)
                    {:special_type (or (:special-type metadata)
                                       (when (:pk? metadata) :type/PK))})))))))
 

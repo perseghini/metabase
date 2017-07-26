@@ -99,8 +99,6 @@
 
 (s/defn ^:private ^:always-validate test:category :- (s/maybe (s/eq :type/Category))
   [field :- i/FieldInstance, _]
-  (println "(:base_type field):" (:base_type field)) ; NOCOMMIT
-  (println "(isa? (:base_type field) ::cannot-be-category):" (isa? (:base_type field) ::cannot-be-category)) ; NOCOMMIT
   (when-not (isa? (:base_type field) ::cannot-be-category)
     (let [distinct-count (queries/field-distinct-count field i/low-cardinality-threshold)]
       (when (< distinct-count i/low-cardinality-threshold)
