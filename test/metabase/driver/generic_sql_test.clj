@@ -1,13 +1,11 @@
 (ns metabase.driver.generic-sql-test
   (:require [expectations :refer :all]
             [metabase.driver :as driver]
-            [metabase.driver.generic-sql :refer :all :as sql]
+            [metabase.driver.generic-sql :as sql :refer :all]
             [metabase.models
              [field :refer [Field]]
              [table :as table :refer [Table]]]
-            [metabase.test
-             [data :refer :all]
-             [util :refer [resolve-private-vars]]]
+            [metabase.test.data :refer :all]
             [metabase.test.data.datasets :as datasets]
             [toucan.db :as db])
   (:import metabase.driver.h2.H2Driver))
@@ -79,15 +77,6 @@
   ;; NOCOMMIT
   #_(driver/analyze-table (H2Driver.) @venues-table (set (mapv :id (table/fields @venues-table)))))
 
-;;; FIELD-AVG-LENGTH
-(datasets/expect-with-engines @generic-sql-engines
-  ;; Not sure why some databases give different values for this but they're close enough that I'll allow them
-  (if (contains? #{:redshift :sqlserver} datasets/*engine*)
-    15
-    16)
-  ;; TODO - this test should me moved somewhere generic so all drivers can use it
-  (throw (UnsupportedOperationException.))
-  #_(#'sql/field-avg-length datasets/*driver* (db/select-one 'Field :id (id :venues :name))))
 
 ;;; FIELD-VALUES-LAZY-SEQ
 (datasets/expect-with-engines @generic-sql-engines
