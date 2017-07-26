@@ -194,7 +194,7 @@
 
   (table-rows-seq ^clojure.lang.Sequential [this, ^DatabaseInstance database, ^java.util.Map table]
     "*OPTIONAL*. Return a sequence of *all* the rows in a given TABLE, which is guaranteed to have at least `:name` and `:schema` keys.
-     (It should satisfy the `DatabaseMetadataTable` schema in `metabase.sync.fetch-metadata`.)
+     (It is guaranteed too satisfy the `DatabaseMetadataTable` schema in `metabase.sync.interface`.)
      Currently, this is only used for iterating over the values in a `_metabase_metadata` table. As such, the results are not expected to be returned lazily.
      There is no expectation that the results be returned in any given order."))
 

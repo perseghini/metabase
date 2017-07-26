@@ -92,6 +92,7 @@
   (sync-util/with-error-handling (format "Error syncing _metabase_metadata table for %s" (sync-util/name-for-logging database))
     ;; If there's more than one metabase metadata table (in different schemas) we'll sync each one in turn.
     ;; Hopefully this is never the case.
+    (println "(fetch-metadata/db-metadata database):" (fetch-metadata/db-metadata database)) ; NOCOMMIT
     (doseq [table (:tables (fetch-metadata/db-metadata database))]
       (when (is-metabase-metadata-table? table)
         (sync-metabase-metadata-table! (driver/->driver database) database table)))))
