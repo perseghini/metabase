@@ -72,7 +72,7 @@
 (def ^:private ^:const table-defaults
   {:id                      true
    :db_id                   true
-   :raw_table_id            true
+   :raw_table_id            false
    :schema                  nil
    :description             nil
    :caveats                 nil
@@ -89,7 +89,7 @@
 (def ^:private ^:const field-defaults
   {:id                 true
    :table_id           true
-   :raw_column_id      true
+   :raw_column_id      false
    :description        nil
    :caveats            nil
    :points_of_interest nil

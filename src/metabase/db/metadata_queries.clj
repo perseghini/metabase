@@ -34,7 +34,7 @@
                                                    (ql/aggregation (ql/count))))]
     (try (-> results first first long)
          (catch Throwable e
-           (log/error "Error fetching table row count:"
+           (log/error "Error fetching table row count. Query returned:\n"
                       (u/pprint-to-str results))
            (throw e)))))
 

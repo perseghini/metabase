@@ -728,11 +728,10 @@
   `(do-with-auto-retries ~num-retries
      (fn [] ~@body)))
 
-(defn string-or-keyword?
-  "Is X a `String` or a `Keyword`?"
-  [x]
-  (or (string? x)
-      (keyword? x)))
+(def ^:deprecated ^{:arglists '([x])} string-or-keyword?
+  "Is X a `String` or a `Keyword`?
+   (DEPRCATED: Don't use this. Just use `(some-fn keyword? string?)` directly instead."
+  (some-fn keyword? string?))
 
 (defn key-by
   "Convert a sequential COLL to a map of `(f item)` -> `item`.
